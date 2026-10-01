@@ -39,3 +39,9 @@ test("direct runtime owns dedicated private ports and generates its tunnel profi
   assert.match(restart, /McpPort/i);
   assert.match(restart, /DevicePort/i);
 });
+
+
+test("local self-enrollment never emits a credential-bearing bootstrap command", async () => {
+  const enroll = await readFile("scripts/New-ExecutorDeviceEnrollment.ps1", "utf8");
+  assert.match(enroll, /bootstrap_command\s*=\s*if\s*\(\$InstallLocal\)\s*\{\s*\$null\s*\}/i);
+});
