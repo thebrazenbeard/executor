@@ -94,6 +94,11 @@
       "id": "EXE-17",
       "requirement": "An explicit operator-run live-tunnel qualifier drives 64 remote MCP calls and requires observed overlap of at least 8 execution lanes and 64 logic lanes; ordinary CI does not claim this live deployment evidence.",
       "automated": false
+    },
+    {
+      "id": "EXE-18",
+      "requirement": "The pinned Desktop Commander payload preserves ordinary workstation environment context but does not inherit Executor/tunnel credentials or loader-injection variables; Windows real-payload qualification verifies an EXECUTOR_* sentinel cannot reach a start_process child.",
+      "automated": true
     }
   ]
 }
