@@ -59,6 +59,21 @@
       "id": "EXE-10",
       "requirement": "Repository source, deployed tunnel, connected device, and observed workstation effect remain separate evidence classes.",
       "automated": false
+    },
+    {
+      "id": "EXE-11",
+      "requirement": "A device ID with a configured per-device token accepts only that token; a shared fallback token cannot impersonate the mapped device.",
+      "automated": true
+    },
+    {
+      "id": "EXE-12",
+      "requirement": "Windows runtime start/stop/restart/status scripts preserve 8/64 defaults, do not persist runtime credentials, and fence recorded PIDs by command-line identity before termination.",
+      "automated": true
+    },
+    {
+      "id": "EXE-13",
+      "requirement": "All checked-in PowerShell operator scripts parse successfully on Windows CI.",
+      "automated": true
     }
   ]
 }
