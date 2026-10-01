@@ -16,6 +16,8 @@ test("Executor ships explicit start stop restart and status operations", async (
   assert.match(start, /EXECUTOR_LOGIC_CAPACITY.*64/);
   assert.match(start, /connectedDeviceCount/);
   assert.match(start, /mcp_session_verified/);
+  assert.match(start, /HEALTH_URL_FILE/);
+  assert.match(start, /tunnel_health_url/);
 
   assert.match(stop, /runtime-state\.json/);
   assert.match(stop, /Win32_Process/);
@@ -27,6 +29,8 @@ test("Executor ships explicit start stop restart and status operations", async (
   assert.match(status, /runtime-state\.json/);
   assert.match(status, /\/health/);
   assert.match(status, /state\.local_mcp/);
+  assert.match(status, /\/readyz/);
+  assert.match(status, /tunnel_ready/);
   assert.equal(status.includes("http://127.0.0.1:8787/health"), false);
   assert.match(stop, /allSafe/);
   assert.match(stop, /Runtime state retained/);
