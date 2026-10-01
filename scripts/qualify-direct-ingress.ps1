@@ -1,7 +1,10 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$root = Join-Path $env:RUNNER_TEMP ("executor-direct-" + [Guid]::NewGuid().ToString("N"))
+$tempRoot = $env:RUNNER_TEMP
+if ([string]::IsNullOrWhiteSpace($tempRoot)) { $tempRoot = $env:TEMP }
+if ([string]::IsNullOrWhiteSpace($tempRoot)) { $tempRoot = [IO.Path]::GetTempPath() }
+$root = Join-Path $tempRoot ("executor-direct-" + [Guid]::NewGuid().ToString("N"))
 $server = $null
 $caddy = $null
 $oldData = $env:XDG_DATA_HOME
