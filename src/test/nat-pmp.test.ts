@@ -1,5 +1,3 @@
-[Reading 45 lines from start (total: 45 lines, 0 remaining)]
-
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";

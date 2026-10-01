@@ -1,5 +1,3 @@
-[Reading 54 lines from start (total: 54 lines, 0 remaining)]
-
 param([string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Executor"))
 
 $ErrorActionPreference = "Stop"

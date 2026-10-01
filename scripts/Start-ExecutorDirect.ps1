@@ -1,5 +1,3 @@
-[Reading 368 lines from start (total: 368 lines, 0 remaining)]
-
 param(
   [string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Executor"),
   [string]$OpenAITunnelCredentialsFile = "",

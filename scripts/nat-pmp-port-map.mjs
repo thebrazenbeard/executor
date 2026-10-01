@@ -1,5 +1,3 @@
-[Reading 226 lines from start (total: 226 lines, 0 remaining)]
-
 import dgram from "node:dgram";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
