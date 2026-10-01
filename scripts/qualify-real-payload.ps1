@@ -105,10 +105,12 @@ try {
 
   $env:PORT = "18991"
   $env:HOST = "127.0.0.1"
+  $env:EXECUTOR_DEVICE_PORT = "18992"
+  $env:EXECUTOR_DEVICE_HOST = "127.0.0.1"
   $env:EXECUTOR_CLIENT_TOKEN = "qualification-client"
   $env:EXECUTOR_DEVICE_TOKEN = "qualification-device"
   $env:EXECUTOR_DEFAULT_DEVICE = "qualification"
-  $env:EXECUTOR_SERVICE_URL = "http://127.0.0.1:18991"
+  $env:EXECUTOR_SERVICE_URL = "http://127.0.0.1:18992"
   $env:EXECUTOR_DEVICE_ID = "qualification"
   $env:EXECUTOR_EXECUTION_CAPACITY = "8"
   $env:EXECUTOR_LOGIC_CAPACITY = "64"
