@@ -2,6 +2,7 @@ param(
   [string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Executor"),
   [string]$OpenAITunnelCredentialsFile = "",
   [string]$PublicHost = "",
+  [string]$TlsServerName = "executor-device.invalid",
   [int]$PublicPort = 9443,
   [int]$McpPort = 18887,
   [int]$DevicePort = 18888,
@@ -110,6 +111,9 @@ if (-not [Net.IPAddress]::TryParse($PublicHost,[ref]$parsedIp) -and [Uri]::Check
 if ($parsedIp -and $parsedIp.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
   throw "direct V1 supports public IPv4 only"
 }
+if ([string]::IsNullOrWhiteSpace($TlsServerName) -or [Uri]::CheckHostName($TlsServerName) -eq [UriHostNameType]::Unknown -or [Net.IPAddress]::TryParse($TlsServerName,[ref]([Net.IPAddress]$null))) {
+  throw "TlsServerName must be a DNS hostname"
+}
 
 if ([string]::IsNullOrWhiteSpace($ProfilePath)) {
   @"
@@ -156,7 +160,7 @@ try {
 
   $publicUrl = ("https://{0}:{1}" -f $PublicHost,$PublicPort)
   $localDeviceUrl = ("https://127.0.0.1:{0}" -f $PublicPort)
-  $siteAddresses = if ($PublicHost -eq "127.0.0.1") { $publicUrl } else { "{0}, {1}" -f $publicUrl,$localDeviceUrl }
+  $siteAddress = ("https://{0}:{1}" -f $TlsServerName,$PublicPort)
 
   @"
 {
@@ -164,7 +168,7 @@ try {
   skip_install_trust
   auto_https disable_redirects
 }
-$siteAddresses {
+$siteAddress {
   tls internal
   @executorDevice path /device /health
   handle @executorDevice {
@@ -208,7 +212,7 @@ $siteAddresses {
   $node = (Get-Command node -ErrorAction Stop).Source
   $probeScript = Join-Path $PSScriptRoot "probe-device-ingress.mjs"
   Wait-Until {
-    & $node $probeScript --url $publicUrl --ca $rootCa --resolve-to-loopback *> $null
+    & $node $probeScript --url $publicUrl --ca $rootCa --server-name $TlsServerName --resolve-to-loopback *> $null
     return ($LASTEXITCODE -eq 0)
   } 30 "direct TLS health probe did not become ready"
 
@@ -218,6 +222,7 @@ $siteAddresses {
     public_device_url = $publicUrl
     public_host = $PublicHost
     public_port = $PublicPort
+    tls_server_name = $TlsServerName
     local_mcp_port = $McpPort
     local_device_port = $DevicePort
     tunnel_profile_path = $ProfilePath
@@ -236,6 +241,7 @@ $siteAddresses {
   Write-Host "MCP loopback: 127.0.0.1:$McpPort"
   Write-Host "Device loopback: 127.0.0.1:$DevicePort"
   Write-Host "Device endpoint: $publicUrl"
+  Write-Host "TLS server name: $TlsServerName"
   Write-Host "CA certificate: $rootCa"
   Write-Host "No traffic relay is in the device path."
   if ($upnpCreated) { Write-Host "UPnP TCP mapping created." }
@@ -243,7 +249,7 @@ $siteAddresses {
 
   if (-not [string]::IsNullOrWhiteSpace($DeviceId)) {
     if ($InstallLocalDevice) {
-      & (Join-Path $PSScriptRoot "New-ExecutorDeviceEnrollment.ps1") -DeviceId $DeviceId -DeviceServiceUrl $localDeviceUrl -CaCertificatePath $rootCa -InstallLocal | Out-Host
+      & (Join-Path $PSScriptRoot "New-ExecutorDeviceEnrollment.ps1") -DeviceId $DeviceId -DeviceServiceUrl $localDeviceUrl -CaCertificatePath $rootCa -TlsServerName $TlsServerName -InstallLocal | Out-Host
       Wait-Until {
         $localHealth = Invoke-RestMethod ("http://127.0.0.1:$DevicePort/health") -TimeoutSec 2
         return ([int]$localHealth.connectedDeviceCount -ge 1)
@@ -251,7 +257,7 @@ $siteAddresses {
       Write-Host "Local Executor device connected: $DeviceId"
     }
     else {
-      & (Join-Path $PSScriptRoot "New-ExecutorDeviceEnrollment.ps1") -DeviceId $DeviceId -DeviceServiceUrl $publicUrl -CaCertificatePath $rootCa
+      & (Join-Path $PSScriptRoot "New-ExecutorDeviceEnrollment.ps1") -DeviceId $DeviceId -DeviceServiceUrl $publicUrl -CaCertificatePath $rootCa -TlsServerName $TlsServerName
     }
   }
 }
