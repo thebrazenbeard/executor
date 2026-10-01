@@ -389,9 +389,18 @@ Commit: `feat: add read only DSM inspection tools`
 
 Assert one-time use, 5-minute expiration, immutable normalized parameters, current-state hash/currentness check, generation binding, concurrent double-apply rejection, and readback verification.
 
-- [ ] **Step 2: Write reconnect-generation test**
+- [ ] **Step 2: Write reconnect/restart lifecycle tests**
 
-Prepare at generation N, simulate WebSocket reconnect/ready generation N+1, then assert apply rejects with `STALE_PROPOSAL`.
+Cover all of the following:
+- prepare at generation N, reconnect to generation N+1, then assert apply rejects with `STALE_PROPOSAL`;
+- approved `executor.restart` sends and flushes a successful apply response before the old process/connection exits;
+- replacement process starts exactly once and the parent exits exactly once;
+- replacement connection receives generation N+1 and becomes routable before restart is considered verified;
+- no orphaned parent or duplicate replacement remains after successful handoff;
+- if replacement startup fails before handoff, the old node stays alive and apply returns failure rather than disconnecting ambiguously;
+- if disconnect occurs after successful response but before replacement reconnect, Executor reports the device offline until the new generation arrives and does not replay the restart;
+- after reconnect, `ping`, `tools/list`, one storage read/write round trip, and `admin.executor_status` all succeed;
+- a second restart can be prepared and completed after the first, proving restart is repeatable rather than one-shot.
 
 - [ ] **Step 3: Write skill-contract test**
 
@@ -404,14 +413,19 @@ Expected: FAIL.
 
 - [ ] **Step 5: Implement engine and self-management adapters**
 
-The restart adapter prepares a same-user replacement process but does not switch connections during the RPC. `admin.apply_change` returns a successful verified result first; only after the bridge has written that response does the `AfterResponse` callback release the replacement process to connect and then exit the parent. This prevents a successful restart from being misclassified as `OUTCOME_UNKNOWN`. No `sudo`, `synopkg`, or root helper.
+The restart adapter prepares a same-user replacement process but does not switch connections during the RPC. `admin.apply_change` returns a successful verified result first; only after the bridge has written and flushed that response does the `AfterResponse` callback release the replacement process to connect. The parent remains alive until the replacement has successfully initialized its local node state and begun the outbound connection attempt; it then exits exactly once. This prevents a successful restart from being misclassified as `OUTCOME_UNKNOWN`, avoids duplicate children, and gives a deterministic failure path if child startup fails. No `sudo`, `synopkg`, or root helper.
 
-- [ ] **Step 6: Verify**
+- [ ] **Step 6: Verify restart repeatedly before broad tests**
+
+Run the focused restart lifecycle test at least 20 consecutive times in one command/process invocation.
+Expected: all 20 cycles PASS with no leaked child processes, duplicate generations, or ambiguous restart outcome.
+
+- [ ] **Step 7: Verify broad suites**
 
 Run: `cd nodes/synology && go test ./... && cd ../.. && npm test`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 Commit: `feat: require verified proposals for DSM mutations`
 
@@ -566,9 +580,11 @@ Include:
 5. create/read/hash/move/delete a disposable test tree in a granted share;
 6. attempt `../`, absolute path, symlink escape, and `@appstore` access and require rejection;
 7. inspect DSM read-only tools;
-8. prepare an ExecutorNode restart, confirm no apply occurs before user approval, approve it, and verify readback/reconnect;
-9. record idle RSS and ensure it is below the 32 MB design target;
-10. leave all real user data untouched.
+8. prepare an ExecutorNode restart, confirm no apply occurs before user approval, approve it, verify the apply response arrives before disconnect, verify generation increments exactly once, then verify ping/tools/storage/admin after reconnect;
+9. repeat the approved restart cycle three times on the physical DS216 and confirm no duplicate processes, stale generations, or orphaned package processes remain;
+10. simulate/observe package stop-start separately from self-restart and verify the same configuration/token are retained;
+11. record idle RSS and ensure it is below the 32 MB design target;
+12. leave all real user data untouched.
 
 - [ ] **Step 2: Add an evidence template**
 
