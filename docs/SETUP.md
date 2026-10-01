@@ -42,6 +42,23 @@ Provide your tunnel identity, runtime API credential, and Executor client token 
 
 The checked-in profile allows 64 concurrent upstream requests. No live credential or tunnel identity belongs in Git history.
 
+## One-command local runtime
+
+After building Executor and installing the pinned Desktop Commander payload, the Windows operator surface can bring up the service, device agent, and private tunnel together.
+
+Runtime environment must provide the client credential, workstation identity/install information, tunnel identity/API credential, and either a shared device credential or the per-device credential map described above. With map-only server credentials, the launcher can resolve the local agent token from the map for `EXECUTOR_DEVICE_ID`; `EXECUTOR_DEVICE_AGENT_TOKEN` can override that resolution without enabling a shared server credential.
+
+```powershell
+.\scripts\Start-ExecutorRuntime.ps1
+.\scripts\Get-ExecutorStatus.ps1
+.\scripts\Restart-ExecutorRuntime.ps1
+.\scripts\Stop-ExecutorRuntime.ps1
+```
+
+The runtime defaults to 8 parallel execution lanes and 64 parallel logic lanes. It verifies local health, device attachment, and tunnel MCP-session initialization before writing state.
+
+Runtime state is stored under `%LOCALAPPDATA%\Executor\runtime-state.json` by default. That file contains PIDs, device identity, lane counts, local MCP address, timestamps, and log location—never the tunnel API credential or Executor/device bearer credentials. Stop/restart re-check each recorded PID's Windows command line before termination so PID reuse cannot silently kill an unrelated process.
+
 ## Connect the AI client
 
 Bind ChatGPT or another remote-MCP-capable client to the actual endpoint associated with your private tunnel.
