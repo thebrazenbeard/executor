@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 function equalSecret(a: string, b: string): boolean {
   const aa = Buffer.from(a);
@@ -46,4 +47,23 @@ export function deviceTokenAuthorized(
   const bound = perDeviceTokens.get(deviceId);
   if (bound !== undefined) return equalSecret(actual, bound);
   return sharedToken.length > 0 && equalSecret(actual, sharedToken);
+}
+
+
+export function loadDeviceTokensFile(filePath: string | undefined): DeviceTokenMap {
+  if (!filePath?.trim()) return new Map();
+  try {
+    return parseDeviceTokens(readFileSync(filePath, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Map();
+    throw error;
+  }
+}
+
+export function mergeDeviceTokenMaps(...maps: DeviceTokenMap[]): DeviceTokenMap {
+  const merged = new Map<string, string>();
+  for (const map of maps) {
+    for (const [deviceId, token] of map) merged.set(deviceId, token);
+  }
+  return merged;
 }

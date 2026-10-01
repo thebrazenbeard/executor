@@ -6,12 +6,15 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 test("Executor exposes RDC-style device routing while preserving downstream tool semantics", { timeout: 30_000 }, async () => {
-  const port = 18787 + Math.floor(Math.random() * 1000);
+  const port = 18787 + Math.floor(Math.random() * 500);
+  const devicePort = port + 1000;
   const child = spawn(process.execPath, ["dist/server.js"], {
     env: {
       ...process.env,
       PORT: String(port),
       HOST: "127.0.0.1",
+      EXECUTOR_DEVICE_HOST: "127.0.0.1",
+      EXECUTOR_DEVICE_PORT: String(devicePort),
       EXECUTOR_CLIENT_TOKEN: "client-test",
       EXECUTOR_DEVICE_TOKEN: "device-test",
       EXECUTOR_DEFAULT_DEVICE: "fake"
@@ -22,7 +25,7 @@ test("Executor exposes RDC-style device routing while preserving downstream tool
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("server start timeout")), 8000);
     child.stdout.on("data", chunk => {
-      if (chunk.toString().includes('"status":"listening"')) {
+      if (chunk.toString().includes('"role":"device"')) {
         clearTimeout(timer);
         resolve();
       }
@@ -32,7 +35,7 @@ test("Executor exposes RDC-style device routing while preserving downstream tool
 
   const forwardedMethods: string[] = [];
   const forwardedToolArguments: Record<string, unknown>[] = [];
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/device`);
+  const ws = new WebSocket(`ws://127.0.0.1:${devicePort}/device`);
 
   await new Promise<void>((resolve, reject) => {
     ws.once("open", () => ws.send(JSON.stringify({
@@ -158,12 +161,15 @@ test("Executor exposes RDC-style device routing while preserving downstream tool
 
 
 test("Executor remains connectable when no workstation is online", { timeout: 20_000 }, async () => {
-  const port = 20787 + Math.floor(Math.random() * 1000);
+  const port = 20787 + Math.floor(Math.random() * 500);
+  const devicePort = port + 1000;
   const child = spawn(process.execPath, ["dist/server.js"], {
     env: {
       ...process.env,
       PORT: String(port),
       HOST: "127.0.0.1",
+      EXECUTOR_DEVICE_HOST: "127.0.0.1",
+      EXECUTOR_DEVICE_PORT: String(devicePort),
       EXECUTOR_CLIENT_TOKEN: "offline-client-test",
       EXECUTOR_DEVICE_TOKEN: "offline-device-test",
       EXECUTOR_DEFAULT_DEVICE: ""

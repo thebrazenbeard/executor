@@ -4,12 +4,15 @@ import { spawn } from "node:child_process";
 import WebSocket from "ws";
 
 test("Executor can run map-only device credentials and binds each token to its device ID", { timeout: 20_000 }, async () => {
-  const port = 22787 + Math.floor(Math.random() * 1000);
+  const port = 22787 + Math.floor(Math.random() * 500);
+  const devicePort = port + 1000;
   const child = spawn(process.execPath, ["dist/server.js"], {
     env: {
       ...process.env,
       PORT: String(port),
       HOST: "127.0.0.1",
+      EXECUTOR_DEVICE_HOST: "127.0.0.1",
+      EXECUTOR_DEVICE_PORT: String(devicePort),
       EXECUTOR_CLIENT_TOKEN: "client-test",
       EXECUTOR_DEVICE_TOKEN: "",
       EXECUTOR_DEVICE_TOKENS_JSON: JSON.stringify({
@@ -23,7 +26,7 @@ test("Executor can run map-only device credentials and binds each token to its d
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("server start timeout")), 8000);
     child.stdout.on("data", chunk => {
-      if (chunk.toString().includes('"status":"listening"')) {
+      if (chunk.toString().includes('"role":"device"')) {
         clearTimeout(timer);
         resolve();
       }
@@ -32,7 +35,7 @@ test("Executor can run map-only device credentials and binds each token to its d
   });
 
   async function connect(deviceId: string, token: string) {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/device`);
+    const ws = new WebSocket(`ws://127.0.0.1:${devicePort}/device`);
     return await new Promise<{ ws: WebSocket; ready: boolean; closeCode?: number }>((resolve, reject) => {
       ws.once("open", () => ws.send(JSON.stringify({
         type: "hello",

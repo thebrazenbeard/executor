@@ -10,7 +10,7 @@ async function waitForListening(child: ReturnType<typeof spawn>) {
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("server start timeout")), 8000);
     child.stdout?.on("data", chunk => {
-      if (chunk.toString().includes('"status":"listening"')) {
+      if (chunk.toString().includes('"role":"device"')) {
         clearTimeout(timer);
         resolve();
       }

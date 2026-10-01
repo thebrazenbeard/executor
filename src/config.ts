@@ -41,3 +41,11 @@ export function serverBindConfig(env: NodeJS.ProcessEnv = process.env): ServerBi
     port: positiveInt("PORT", env.PORT, 8787)
   };
 }
+
+
+export function deviceIngressBindConfig(env: NodeJS.ProcessEnv = process.env): ServerBindConfig {
+  return {
+    host: env.EXECUTOR_DEVICE_HOST?.trim() || "127.0.0.1",
+    port: positiveInt("EXECUTOR_DEVICE_PORT", env.EXECUTOR_DEVICE_PORT, 8788)
+  };
+}
