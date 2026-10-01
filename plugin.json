@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "executor",
-  "version": "0.1.2",
+  "version": "0.1.0",
   "description": "Operate authorized workstations through Executor and an Executor-pinned Desktop Commander payload.",
   "author": {
     "name": "Patrick A. Sims"
