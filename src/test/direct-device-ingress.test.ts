@@ -34,6 +34,7 @@ test("direct runtime has no traffic relay and fronts only device ingress", async
   assert.match(start, /root\.crt/);
   assert.match(start, /New-ExecutorDeviceEnrollment\.ps1/);
   assert.equal(/cloudflare|tailscale|ngrok|tunnel\s+--url/i.test(start), false);
+  assert.equal(/function\s+(NV|SP)\b/i.test(start), false, "direct runtime helper names must not collide with PowerShell aliases");
 
   const stateBlock = start.match(/\[pscustomobject\]@\{([\s\S]*?)\}\s*\|\s*ConvertTo-Json/i)?.[1] ?? "";
   assert.ok(stateBlock.length > 0);
