@@ -17,9 +17,22 @@ read_pid() {
   printf '%s' "$pid"
 }
 
+pid_matches_executor() {
+  pid="$1"
+  kill -0 "$pid" 2>/dev/null || return 1
+
+  exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+  if [ "$exe" = "$BIN" ]; then
+    return 0
+  fi
+
+  [ -r "/proc/$pid/cmdline" ] || return 1
+  cat "/proc/$pid/cmdline" 2>/dev/null | tr '\000' '\n' | grep -F -x "$BIN" >/dev/null 2>&1
+}
+
 is_running() {
   pid="$(read_pid)" || return 1
-  kill -0 "$pid" 2>/dev/null
+  pid_matches_executor "$pid"
 }
 
 case "${1:-}" in
@@ -38,21 +51,26 @@ case "${1:-}" in
     pid=$!
     printf '%s\n' "$pid" > "$PIDFILE"
     sleep 0.1
-    if kill -0 "$pid" 2>/dev/null; then
+    if pid_matches_executor "$pid"; then
       exit 0
     fi
     rm -f "$PIDFILE"
     exit 1
     ;;
   stop)
-    if ! is_running; then
+    pid="$(read_pid 2>/dev/null || true)"
+    if [ -z "$pid" ] || ! pid_matches_executor "$pid"; then
       rm -f "$PIDFILE"
       exit 0
     fi
-    pid="$(read_pid)"
+
+    if ! pid_matches_executor "$pid"; then
+      rm -f "$PIDFILE"
+      exit 0
+    fi
     kill "$pid" 2>/dev/null || true
     attempts=0
-    while kill -0 "$pid" 2>/dev/null; do
+    while pid_matches_executor "$pid"; do
       attempts=$((attempts + 1))
       [ "$attempts" -lt 100 ] || exit 1
       sleep 0.1

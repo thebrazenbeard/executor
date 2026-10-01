@@ -18,6 +18,35 @@ func closeFD(fd int) error {
 	return unix.Close(fd)
 }
 
+func openAbsoluteDirNoFollow(abs string) (int, error) {
+	clean := path.Clean(abs)
+	if !strings.HasPrefix(clean, "/") {
+		return -1, errors.New("root path must be absolute")
+	}
+
+	current, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return -1, err
+	}
+	if clean == "/" {
+		return current, nil
+	}
+
+	for _, component := range strings.Split(strings.TrimPrefix(clean, "/"), "/") {
+		if component == "" || component == "." || component == ".." {
+			_ = unix.Close(current)
+			return -1, fmt.Errorf("unsafe configured root component %q", component)
+		}
+		next, openErr := unix.Openat(current, component, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		_ = unix.Close(current)
+		if openErr != nil {
+			return -1, openErr
+		}
+		current = next
+	}
+	return current, nil
+}
+
 func NewManager(configs []RootConfig) (*Manager, error) {
 	m := &Manager{roots: make(map[string]*rootHandle, len(configs))}
 	for _, cfg := range configs {
@@ -35,7 +64,7 @@ func NewManager(configs []RootConfig) (*Manager, error) {
 		}
 
 		handle := &rootHandle{cfg: cfg, fd: -1, access: "unavailable"}
-		fd, err := unix.Open(cfg.Path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		fd, err := openAbsoluteDirNoFollow(cfg.Path)
 		if err == nil {
 			handle.fd = fd
 			handle.access = "read-only"
