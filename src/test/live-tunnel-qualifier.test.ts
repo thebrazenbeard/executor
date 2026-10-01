@@ -35,3 +35,11 @@ test("package and setup docs expose live tunnel qualification as an explicit ope
   assert.match(setup, /8 parallel execution lanes/i);
   assert.match(setup, /64 parallel logic lanes/i);
 });
+
+
+test("live tunnel qualifier does not echo the remote endpoint because it may contain credential-bearing query data", async () => {
+  const script = await readFile("scripts/qualify-live-tunnel.mjs", "utf8");
+  const outputBlock = script.match(/console\.log\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/)?.[1] ?? "";
+  assert.ok(outputBlock.length > 0, "qualification result block not found");
+  assert.equal(/\bremoteMcpUrl\b/.test(outputBlock), false);
+});
