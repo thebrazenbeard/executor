@@ -3,8 +3,10 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/protocol"
+	"github.com/thebrazenbeard/executor/nodes/synology/internal/storage"
 )
 
 type DispatchResult struct {
@@ -13,12 +15,23 @@ type DispatchResult struct {
 	NoResponse    bool
 }
 
-type Handler struct {
-	version string
+type Option func(*Handler)
+
+func WithStorage(manager *storage.Manager) Option {
+	return func(h *Handler) { h.storage = manager }
 }
 
-func NewHandler(version string) *Handler {
-	return &Handler{version: version}
+type Handler struct {
+	version string
+	storage *storage.Manager
+}
+
+func NewHandler(version string, options ...Option) *Handler {
+	h := &Handler{version: version}
+	for _, option := range options {
+		if option != nil { option(h) }
+	}
+	return h
 }
 
 func (h *Handler) InitializeResult(protocolVersion string) map[string]any {
@@ -61,7 +74,7 @@ func (h *Handler) Handle(_ context.Context, request protocol.JSONRPC) (DispatchR
 	case "ping":
 		return result(request.ID, map[string]any{}), nil
 	case "tools/list":
-		return result(request.ID, map[string]any{"tools": []protocol.Tool{}}), nil
+		return result(request.ID, map[string]any{"tools": h.tools()}), nil
 	case "tools/call":
 		var params struct {
 			Name      string          `json:"name"`
@@ -69,6 +82,9 @@ func (h *Handler) Handle(_ context.Context, request protocol.JSONRPC) (DispatchR
 		}
 		if err := json.Unmarshal(request.Params, &params); err != nil {
 			return rpcError(request.ID, -32602, "invalid tool arguments"), nil
+		}
+		if strings.HasPrefix(params.Name, "storage.") && h.storage != nil {
+			return h.callStorageTool(request.ID, params.Name, params.Arguments), nil
 		}
 		return rpcError(request.ID, -32601, "unknown tool: "+params.Name), nil
 	default:
