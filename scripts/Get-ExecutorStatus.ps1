@@ -41,22 +41,7 @@ $tunnel = Get-RecordedProcessState ([int]$state.tunnel_pid) "tunnel-client"
 $health = $null
 $healthOk = $false
 try {
-  $healthUrl = ([string]$state.local_mcp) -replace '/mcp
-
-[pscustomobject]@{
-  running = ($server.alive -and $server.identity_match -and $device.alive -and $device.identity_match -and $tunnel.alive -and $tunnel.identity_match -and $healthOk)
-  state_present = $true
-  state_path = $StatePath
-  device_id = $state.device_id
-  server = $server
-  device = $device
-  tunnel = $tunnel
-  health_ok = $healthOk
-  health = $health
-  mcp_session_verified = [bool]$state.mcp_session_verified
-  started_utc = $state.started_utc
-} | ConvertTo-Json -Depth 8
-, '/health'
+  $healthUrl = ([string]$state.local_mcp) -replace '/mcp$', '/health'
   $health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 2
   $healthOk = ($health.status -eq "ok")
 }
