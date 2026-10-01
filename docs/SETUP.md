@@ -55,7 +55,7 @@ Runtime environment must provide the client credential, workstation identity/ins
 .\scripts\Stop-ExecutorRuntime.ps1
 ```
 
-The runtime defaults to 8 parallel execution lanes and 64 parallel logic lanes. It verifies local health, device attachment, and tunnel MCP-session initialization before writing state.
+The runtime defaults to 8 parallel execution lanes and 64 parallel logic lanes. It verifies local health, device attachment, tunnel MCP-session initialization, and the tunnel client's live `/readyz` readiness endpoint before writing state. `Get-ExecutorStatus.ps1` re-probes `/readyz`, so a still-running but no-longer-ready tunnel is reported as not running.
 
 Runtime state is stored under `%LOCALAPPDATA%\Executor\runtime-state.json` by default. That file contains PIDs, device identity, lane counts, local MCP address, timestamps, and log location—never the tunnel API credential or Executor/device bearer credentials. Stop/restart re-check each recorded PID's Windows command line before termination so PID reuse cannot silently kill an unrelated process.
 
