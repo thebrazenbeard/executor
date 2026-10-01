@@ -6,7 +6,7 @@ Executor is a remote-control surface. Treat access to its MCP identity as access
 
 Executor preserves full Desktop Commander semantics, including arbitrary command-string execution. Payload integrity verifies what implementation is launched; it is not a sandbox and does not reduce workstation authority.
 
-The remote layer therefore depends on strong authentication, explicit device association, encrypted transport, connection-generation fencing, and exact routing.
+The remote layer therefore depends on strong authentication, explicit device association, encrypted transport, connection-generation fencing, and exact routing. `EXECUTOR_DEVICE_TOKENS_JSON` can bind distinct credentials to specific device IDs; when an ID is mapped, the shared device token cannot impersonate it.
 
 ## No false deployment claims
 
