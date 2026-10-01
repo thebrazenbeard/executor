@@ -26,6 +26,7 @@ try{
  @"
 {
  admin off
+ skip_install_trust
  auto_https disable_redirects
 }
 $site {
