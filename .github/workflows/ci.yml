@@ -28,4 +28,8 @@ jobs:
           node-version: "24"
       - run: npm install --ignore-scripts
       - run: npm test
+      - name: Qualify real full Desktop Commander payload at 8/64
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\scripts\qualify-real-payload.ps1
       - run: npm run audit
