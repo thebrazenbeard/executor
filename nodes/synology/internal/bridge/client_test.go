@@ -120,6 +120,9 @@ func TestClientReconnectsToNewGenerationWithoutReplayingOldRequests(t *testing.T
 	case <-secondReady:
 	case <-time.After(2*time.Second): t.Fatal("reconnect timeout")
 	}
+	for deadline := time.Now().Add(2*time.Second); client.Generation()!=2 && time.Now().Before(deadline); {
+		time.Sleep(5*time.Millisecond)
+	}
 	if client.Generation()!=2 { t.Fatalf("generation=%d want 2", client.Generation()) }
 	cancel()
 	select {
