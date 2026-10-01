@@ -21,3 +21,17 @@ test("live tunnel qualification remains opt-in and is not run by ordinary CI", a
   const workflow = await readFile(".github/workflows/ci.yml", "utf8");
   assert.equal(workflow.includes("qualify-live-tunnel.mjs"), false);
 });
+
+
+test("package and setup docs expose live tunnel qualification as an explicit operator action", async () => {
+  const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+  const setup = await readFile("docs/SETUP.md", "utf8");
+
+  assert.equal(packageJson.scripts["qualify:live-tunnel"], "node scripts/qualify-live-tunnel.mjs");
+  assert.match(setup, /qualify:live-tunnel/);
+  assert.match(setup, /EXECUTOR_REMOTE_MCP_URL/);
+  assert.match(setup, /EXECUTOR_REMOTE_DEVICE_ID/);
+  assert.match(setup, /EXECUTOR_REMOTE_AUTHORIZATION/);
+  assert.match(setup, /8 parallel execution lanes/i);
+  assert.match(setup, /64 parallel logic lanes/i);
+});
