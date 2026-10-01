@@ -118,6 +118,17 @@ esac
 status_code=$?
 [ "$status_code" -eq 3 ] || fail "stopped status code=$status_code, expected 3"
 
+sleep 30 &
+unrelated_pid=$!
+printf '%s\n' "$unrelated_pid" > "$SYNOPKG_PKGVAR/executor-node.pid"
+"$PKG_ROOT/scripts/start-stop-status" stop
+if ! kill -0 "$unrelated_pid" 2>/dev/null; then
+  fail "stale PID file caused stop to kill an unrelated process"
+fi
+kill "$unrelated_pid" 2>/dev/null || true
+wait "$unrelated_pid" 2>/dev/null || true
+[ ! -f "$SYNOPKG_PKGVAR/executor-node.pid" ] || fail "stale PID file was not cleared"
+
 "$PKG_ROOT/scripts/start-stop-status" start
 "$PKG_ROOT/scripts/start-stop-status" status || fail "status should report running"
 
