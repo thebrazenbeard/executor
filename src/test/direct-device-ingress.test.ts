@@ -32,7 +32,8 @@ test("direct runtime has no traffic relay and fronts only device ingress", async
   assert.match(start, /New-NetFirewallRule/);
   assert.match(start, /HNetCfg\.NATUPnP/);
   assert.match(start, /root\.crt/);
-  assert.match(start, /ssl-revoke-best-effort/i);
+  assert.match(start, /probe-device-ingress\.mjs/i);
+  assert.equal(/ssl-revoke-best-effort|--cacert/i.test(start), false);
   assert.match(start, /StaticPortMappingCollection[\s\S]*Remove\(/i);
   assert.match(start, /New-ExecutorDeviceEnrollment\.ps1/);
   assert.equal(/cloudflare|tailscale|ngrok|tunnel\s+--url/i.test(start), false);
@@ -66,9 +67,10 @@ test("enrollment carries a public CA without changing device-token storage", asy
 
 test("direct reachability tool exists and does not invoke a relay service", async () => {
   const probe = await readFile("scripts/Test-ExecutorDirectReachability.ps1", "utf8");
-  assert.match(probe, /--cacert|CaCertificatePath/);
-  assert.match(probe, /\/health/);
-  assert.match(probe, /ssl-revoke-best-effort/i);
+  assert.match(probe, /CaCertificatePath/);
+  assert.match(probe, /probe-device-ingress\.mjs/i);
+  assert.match(probe, /resolve-to-loopback/i);
+  assert.equal(/ssl-revoke-best-effort|--cacert/i.test(probe), false);
   assert.equal(/cloudflare|tailscale|ngrok/i.test(probe), false);
 });
 
@@ -81,4 +83,15 @@ test("Windows CI exercises a real Caddy TLS + WSS device route", async () => {
   assert.match(qualifier, /tls\s+internal/i);
   assert.match(probe, /new WebSocket/);
   assert.match(probe, /deviceHello/);
+});
+
+
+test("Node direct-ingress probe verifies CA, health role, and optional loopback resolution", async () => {
+  const probe = await readFile("scripts/probe-device-ingress.mjs", "utf8");
+  assert.match(probe, /node:https|from "https"|from 'https'/i);
+  assert.match(probe, /rejectUnauthorized\s*:\s*true/i);
+  assert.match(probe, /checkServerIdentity|hostname|host/i);
+  assert.match(probe, /127\.0\.0\.1/);
+  assert.match(probe, /device-ingress/i);
+  assert.equal(/rejectUnauthorized\s*:\s*false/i.test(probe), false);
 });
