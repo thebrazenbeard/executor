@@ -13,7 +13,7 @@ $arch=[Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString();sw
 $assetName=("caddy_{0}_windows_{1}.zip" -f $version,$assetArch);$checksumsName=("caddy_{0}_checksums.txt" -f $version)
 $asset=@($release.assets|Where-Object{$_.name-eq$assetName})|Select-Object -First 1;$checksums=@($release.assets|Where-Object{$_.name-eq$checksumsName})|Select-Object -First 1
 if(-not$asset-or-not$checksums){throw "Caddy release assets missing"}
-$zip=Join-Path $ToolsRoot "$assetName.download";$sum=Join-Path $ToolsRoot "$checksumsName.download";$extract=Join-Path $ToolsRoot ("caddy-extract-"+[Guid]::NewGuid().ToString("N"))
+$zip=Join-Path $ToolsRoot "$assetName.download.zip";$sum=Join-Path $ToolsRoot "$checksumsName.download";$extract=Join-Path $ToolsRoot ("caddy-extract-"+[Guid]::NewGuid().ToString("N"))
 try{
  Invoke-WebRequest -UseBasicParsing -Uri ([string]$asset.browser_download_url) -OutFile $zip
  Invoke-WebRequest -UseBasicParsing -Uri ([string]$checksums.browser_download_url) -OutFile $sum
