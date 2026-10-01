@@ -71,7 +71,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && req.url === "/health") {
-    return json(res, 200, {
+    const body: Record<string, unknown> = {
       status: "ok",
       connectedDeviceCount: registry.list().length,
       executionCapacityPerDevice: capacity.executionPerDevice,
@@ -80,9 +80,12 @@ const server = http.createServer(async (req, res) => {
       upstreamContextActive: logic.activeCount,
       upstreamContextQueued: logic.queuedCount,
       executionActive: registry.list().reduce((sum, id) => sum + (registry.get(id)?.activeCount ?? 0), 0),
-      executionQueued: registry.list().reduce((sum, id) => sum + (registry.get(id)?.queuedCount ?? 0), 0),
-      devices: registry.list().map(id => registry.describe(id))
-    });
+      executionQueued: registry.list().reduce((sum, id) => sum + (registry.get(id)?.queuedCount ?? 0), 0)
+    };
+    if (bearerAuthorized(req.headers.authorization, clientToken)) {
+      body.devices = registry.list().map(id => registry.describe(id));
+    }
+    return json(res, 200, body);
   }
 
   if (req.url === "/mcp" && !isOriginAllowed(req.headers.origin, allowedOrigins)) return json(res, 403, { error: "origin not allowed" });
