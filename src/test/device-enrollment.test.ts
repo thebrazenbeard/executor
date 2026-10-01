@@ -47,3 +47,11 @@ test("Windows laptop installer protects only the device credential locally and s
   assert.match(start, /ReleaseMutex/i);
   assert.equal(/&\s*\$node\s+\$agent\s+\*>>/i.test(start), false);
 });
+
+
+test("device agent exposes safe websocket handshake state and bounds a stuck handshake", async () => {
+  const agent = await readFile("src/device-agent.ts", "utf8");
+  assert.match(agent, /handshakeTimeout\s*:\s*10_000/);
+  assert.match(agent, /device-websocket-open/);
+  assert.match(agent, /device-websocket-ready/);
+});
