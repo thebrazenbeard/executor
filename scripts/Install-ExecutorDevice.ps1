@@ -111,7 +111,6 @@ try {
     task_name = $TaskName
     ca_path = if (Test-Path -LiteralPath $caPath -PathType Leaf) { $caPath } else { $null }
     tls_server_name = if ([string]::IsNullOrWhiteSpace($TlsServerName)) { $null } else { $TlsServerName }
-    tls_server_name = if ([string]::IsNullOrWhiteSpace($TlsServerName)) { $null } else { $TlsServerName }
   } | ConvertTo-Json -Depth 4
   $configJson | Set-Content -LiteralPath $configPath -Encoding UTF8
 
