@@ -113,3 +113,13 @@ test("Windows direct qualifier falls back to a normal temp directory outside Git
   assert.match(qualifier, /RUNNER_TEMP/);
   assert.match(qualifier, /\$env:TEMP|GetTempPath/i);
 });
+
+
+test("direct runtime validates an existing router mapping before treating it as owned", async () => {
+  const start = await readFile("scripts/Start-ExecutorDirect.ps1", "utf8");
+  assert.match(start, /ExternalPort/i);
+  assert.match(start, /InternalClient/i);
+  assert.match(start, /InternalPort/i);
+  assert.match(start, /Description/i);
+  assert.match(start, /mapping conflict/i);
+});
