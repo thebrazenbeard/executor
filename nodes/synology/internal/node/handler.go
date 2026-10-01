@@ -21,6 +21,17 @@ func NewHandler(version string) *Handler {
 	return &Handler{version: version}
 }
 
+func (h *Handler) InitializeResult(protocolVersion string) map[string]any {
+	if protocolVersion == "" {
+		protocolVersion = "2025-06-18"
+	}
+	return map[string]any{
+		"protocolVersion": protocolVersion,
+		"capabilities": map[string]any{"tools": map[string]any{}},
+		"serverInfo": map[string]any{"name": "executor-synology-node", "version": h.version},
+	}
+}
+
 func result(id json.RawMessage, value any) DispatchResult {
 	data, _ := json.Marshal(value)
 	return DispatchResult{Result: protocol.JSONRPC{JSONRPC: "2.0", ID: id, Result: data}}
@@ -46,11 +57,7 @@ func (h *Handler) Handle(_ context.Context, request protocol.JSONRPC) (DispatchR
 		if params.ProtocolVersion == "" {
 			params.ProtocolVersion = "2025-06-18"
 		}
-		return result(request.ID, map[string]any{
-			"protocolVersion": params.ProtocolVersion,
-			"capabilities": map[string]any{"tools": map[string]any{}},
-			"serverInfo": map[string]any{"name": "executor-synology-node", "version": h.version},
-		}), nil
+		return result(request.ID, h.InitializeResult(params.ProtocolVersion)), nil
 	case "ping":
 		return result(request.ID, map[string]any{}), nil
 	case "tools/list":
