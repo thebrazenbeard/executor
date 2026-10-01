@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: executor-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - run: npm install --ignore-scripts
+      - run: npm test
+      - name: Parse PowerShell operator scripts
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem -LiteralPath .\scripts -Filter '*.ps1' | ForEach-Object {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$null,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Error ("PowerShell parse errors in " + $_.Name + ": " + ($errors | Out-String))
+            }
+          }
+          if ($failed) { exit 1 }
+      - name: Qualify official OpenAI tunnel-client bootstrap
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "executor-openai-tunnel-client"
+          $installed = (.\scripts\Install-ExecutorTunnelClient.ps1 -RuntimeRoot $root | Out-String | ConvertFrom-Json)
+          & $installed.path help quickstart
+          if ($LASTEXITCODE -ne 0) { throw "OpenAI tunnel-client bootstrap qualification failed" }
+      - name: Qualify direct Caddy TLS and WSS device ingress
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\scripts\qualify-direct-ingress.ps1
+      - name: Qualify real full Desktop Commander payload at 8/64
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\scripts\qualify-real-payload.ps1
+      - run: npm run audit
