@@ -11,6 +11,7 @@ import { ResourceKeyGate } from "./resource-gate.js";
 import { JsonlExecutionEventStore } from "./execution-store.js";
 import { EffectLedger } from "./effect-ledger.js";
 import { randomUUID } from "node:crypto";
+import { augmentToolsList, executorListDevicesTool, extractDeviceId, stripDeviceId } from "./tool-routing.js";
 
 const port = Number(process.env.PORT ?? "8787");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -105,13 +106,43 @@ const server = http.createServer(async (req, res) => {
   catch { return json(res, 400, { error: "invalid json" }); }
   if (!isJsonRpc(payload)) return json(res, 400, { error: "invalid json-rpc" });
 
+  const toolName = payload.method === "tools/call"
+    && payload.params
+    && typeof payload.params === "object"
+    && !Array.isArray(payload.params)
+    && typeof (payload.params as Record<string, unknown>).name === "string"
+      ? (payload.params as Record<string, unknown>).name as string
+      : undefined;
+
+  if (toolName === executorListDevicesTool.name && payload.id !== undefined) {
+    const devices = registry.list().map(id => {
+      const attachment = registry.describe(id);
+      const connection = registry.get(id);
+      return {
+        ...attachment,
+        executionActive: connection?.activeCount ?? 0,
+        executionQueued: connection?.queuedCount ?? 0
+      };
+    });
+    return json(res, 200, {
+      jsonrpc: "2.0",
+      id: payload.id ?? null,
+      result: {
+        content: [{ type: "text", text: JSON.stringify(devices) }],
+        structuredContent: { devices }
+      }
+    });
+  }
+
   const requested = req.headers["x-executor-device"];
-  const deviceId = (Array.isArray(requested) ? requested[0] : requested) || defaultDevice || registry.list()[0];
+  const routedDeviceId = extractDeviceId(payload);
+  const deviceId = routedDeviceId || (Array.isArray(requested) ? requested[0] : requested) || defaultDevice || registry.list()[0];
   if (deviceId && (deviceId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(deviceId))) return json(res, 400, rpcError(payload.id, -32602, "invalid workstation id"));
   if (!deviceId) return json(res, 503, rpcError(payload.id, -32001, "no workstation connected"));
   const resolved = registry.resolve(deviceId);
   if (!resolved) return json(res, 404, rpcError(payload.id, -32002, "requested workstation is not connected"));
   const { device, generation } = resolved;
+  const downstreamPayload = stripDeviceId(payload);
 
   if (payload.method === "initialize" && payload.id !== undefined) {
     return json(res, 200, localInitializeResponse(payload, device));
@@ -156,12 +187,12 @@ const server = http.createServer(async (req, res) => {
       return resourceKey ? resourceGate.run(resourceKey, execute) : execute();
     };
     if (isNotification(payload)) {
-      await logic.run(lane.id, () => dispatch(device => device.notify(payload)));
+      await logic.run(lane.id, () => dispatch(device => device.notify(downstreamPayload)));
       res.writeHead(202, { "cache-control": "no-store" });
       return res.end();
     }
-    const response = await logic.run(lane.id, () => dispatch(device => device.request(payload)));
-    return json(res, 200, response);
+    const response = await logic.run(lane.id, () => dispatch(device => device.request(downstreamPayload)));
+    return json(res, 200, payload.method === "tools/list" ? augmentToolsList(response) : response);
   } catch (error) {
     return json(res, 502, rpcError(payload.id, -32003, error instanceof Error ? error.message : "device bridge failed"));
   }
