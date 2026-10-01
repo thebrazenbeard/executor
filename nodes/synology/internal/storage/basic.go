@@ -35,7 +35,7 @@ func metaFromStat(name string, st *unix.Stat_t) FileMeta {
 		Kind: kindFromMode(st.Mode),
 		Size: st.Size,
 		Mode: st.Mode & 0o7777,
-		ModTime: time.Unix(st.Mtim.Sec, st.Mtim.Nsec).UTC(),
+		ModTime: time.Unix(int64(st.Mtim.Sec), int64(st.Mtim.Nsec)).UTC(),
 	}
 }
 
