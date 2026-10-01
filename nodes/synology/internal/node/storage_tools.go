@@ -15,7 +15,7 @@ func objectSchema(properties map[string]any, required ...string) map[string]any 
 
 func (h *Handler) tools() []protocol.Tool {
 	tools := []protocol.Tool{}
-	if h.storage == nil { return tools }
+	if h.storage == nil { return h.adminTools() }
 	tools = append(tools,
 		protocol.Tool{Name:"storage.list_roots",Description:"List configured Synology storage roots and effective access.",InputSchema:objectSchema(map[string]any{})},
 		protocol.Tool{Name:"storage.list",Description:"List one directory inside a configured storage root.",InputSchema:objectSchema(map[string]any{
@@ -68,7 +68,7 @@ func (h *Handler) tools() []protocol.Tool {
 			"rootId":map[string]any{"type":"string"},
 		},"rootId")},
 	)
-	return tools
+	return append(tools,h.adminTools()...)
 }
 
 func toolResult(id json.RawMessage, value map[string]any) DispatchResult {
