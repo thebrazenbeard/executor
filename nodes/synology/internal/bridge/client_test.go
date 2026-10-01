@@ -130,3 +130,34 @@ func TestClientReconnectsToNewGenerationWithoutReplayingOldRequests(t *testing.T
 	case <-time.After(2*time.Second): t.Fatal("Run did not stop")
 	}
 }
+
+
+func TestClientOnReadyCallbackAndExplicitReconnect(t *testing.T) {
+	var connections atomic.Int32
+	readyEvents:=make(chan int,4)
+	server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+		conn,err:=upgrader.Upgrade(w,r,nil);if err!=nil{return}
+		defer conn.Close()
+		var hello protocol.Hello
+		if err:=conn.ReadJSON(&hello);err!=nil{return}
+		n:=int(connections.Add(1))
+		if err:=conn.WriteJSON(protocol.Ready{Type:"ready",DeviceID:"DS216",Generation:n});err!=nil{return}
+		for{
+			if _,_,err:=conn.ReadMessage();err!=nil{return}
+		}
+	}))
+	defer server.Close()
+	client,err:=NewClient(ClientConfig{
+		ServiceURL:server.URL,DeviceID:"DS216",Token:"token",NodeVersion:"0.1.0",
+		ReconnectMin:5*time.Millisecond,ReconnectMax:20*time.Millisecond,
+		OnReady:func(generation int){readyEvents<-generation},
+	})
+	if err!=nil{t.Fatal(err)}
+	ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+	done:=make(chan error,1);go func(){done<-client.Run(ctx,node.NewHandler("0.1.0"))}()
+	select{case g:=<-readyEvents:if g!=1{t.Fatalf("first generation=%d",g)};case<-time.After(2*time.Second):t.Fatal("first ready timeout")}
+	client.RequestReconnect()
+	select{case g:=<-readyEvents:if g!=2{t.Fatalf("second generation=%d",g)};case<-time.After(2*time.Second):t.Fatal("reconnect ready timeout")}
+	cancel()
+	select{case<-done:case<-time.After(2*time.Second):t.Fatal("client did not stop")}
+}
