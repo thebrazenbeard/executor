@@ -6,7 +6,7 @@ PKG_SRC="$SCRIPT_DIR/synology"
 BUILD_ROOT="${EXECUTOR_SPK_BUILD_DIR:-$SCRIPT_DIR/build/spk}"
 PAYLOAD="$BUILD_ROOT/payload"
 STAGE="$BUILD_ROOT/stage"
-ARTIFACT="$BUILD_ROOT/ExecutorNode-armada38x-0.1.0-0002.spk"
+ARTIFACT="$BUILD_ROOT/ExecutorNode-armada38x-0.1.0-0003.spk"
 
 command -v go >/dev/null 2>&1 || {
   echo "go is required" >&2
@@ -48,7 +48,7 @@ cp -R "$PKG_SRC/conf" "$STAGE/conf"
 cp -R "$PKG_SRC/WIZARD_UIFILES" "$STAGE/WIZARD_UIFILES"
 
 chmod 755 "$STAGE/scripts/"*
-chmod 644 "$STAGE/INFO" "$STAGE/LICENSE"   "$STAGE/PACKAGE_ICON.PNG" "$STAGE/PACKAGE_ICON_256.PNG"   "$STAGE/conf/privilege" "$STAGE/conf/resource"   "$STAGE/WIZARD_UIFILES/install_uifile"
+chmod 644 "$STAGE/INFO" "$STAGE/LICENSE"   "$STAGE/PACKAGE_ICON.PNG" "$STAGE/PACKAGE_ICON_256.PNG"   "$STAGE/conf/privilege"   "$STAGE/WIZARD_UIFILES/install_uifile"
 
 tar -C "$STAGE" -cf "$ARTIFACT"   INFO package.tgz scripts conf WIZARD_UIFILES   LICENSE PACKAGE_ICON.PNG PACKAGE_ICON_256.PNG
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-ARTIFACT="${1:-$SCRIPT_DIR/build/spk/ExecutorNode-armada38x-0.1.0-0002.spk}"
+ARTIFACT="${1:-$SCRIPT_DIR/build/spk/ExecutorNode-armada38x-0.1.0-0003.spk}"
 PYTHON_BIN="${PYTHON:-python3}"
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || PYTHON_BIN=python
 
@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory() as tmp:
     info = (tmp_path / "INFO").read_text()
     expected_info = {
         "package": "ExecutorNode",
-        "version": "0.1.0-0002",
+        "version": "0.1.0-0003",
         "arch": "armada38x",
         "os_min_ver": "7.2-72806",
         "maintainer": "thebrazenbeard",
@@ -65,10 +65,21 @@ with tempfile.TemporaryDirectory() as tmp:
             raise AssertionError(f"INFO {key}={parsed.get(key)!r}, expected {value!r}")
 
     privilege = json.loads((tmp_path / "conf" / "privilege").read_text())
-    if privilege != {"defaults": {"run-as": "package"}}:
+    expected_privilege = {
+        "defaults": {"run-as": "package"},
+        "username": "executornode",
+        "groupname": "executornode",
+        "tool": [{
+            "relpath": "bin/executor-node",
+            "user": "package",
+            "group": "package",
+            "permission": "0700",
+        }],
+    }
+    if privilege != expected_privilege:
         raise AssertionError(f"unexpected privilege config: {privilege}")
-    if json.loads((tmp_path / "conf" / "resource").read_text()) != {}:
-        raise AssertionError("V1 must not request DSM resource workers")
+    if (tmp_path / "conf" / "resource").exists():
+        raise AssertionError("conf/resource must be omitted when no DSM resource worker is requested")
     for name, dims in [("PACKAGE_ICON.PNG",(64,64)),("PACKAGE_ICON_256.PNG",(256,256))]:
         data = (tmp_path / name).read_bytes()
         if data[:8] != b"\x89PNG\r\n\x1a\n":

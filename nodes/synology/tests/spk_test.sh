@@ -14,13 +14,14 @@ require_file() {
   [ -f "$1" ] || fail "missing file: $1"
 }
 
-for rel in   INFO   scripts/preinst scripts/postinst scripts/preuninst scripts/postuninst   scripts/preupgrade scripts/postupgrade scripts/start-stop-status   conf/privilege conf/resource   WIZARD_UIFILES/install_uifile LICENSE PACKAGE_ICON.PNG PACKAGE_ICON_256.PNG
+for rel in   INFO   scripts/preinst scripts/postinst scripts/preuninst scripts/postuninst   scripts/preupgrade scripts/postupgrade scripts/start-stop-status   conf/privilege   WIZARD_UIFILES/install_uifile LICENSE PACKAGE_ICON.PNG PACKAGE_ICON_256.PNG
 do
   require_file "$PKG_ROOT/$rel"
 done
+[ ! -e "$PKG_ROOT/conf/resource" ] || fail "conf/resource must be omitted when no DSM resource worker is requested"
 
 grep -qx 'package="ExecutorNode"' "$PKG_ROOT/INFO" || fail "wrong package field"
-grep -qx 'version="0.1.0-0002"' "$PKG_ROOT/INFO" || fail "wrong version field"
+grep -qx 'version="0.1.0-0003"' "$PKG_ROOT/INFO" || fail "wrong version field"
 grep -qx 'arch="armada38x"' "$PKG_ROOT/INFO" || fail "wrong arch field"
 grep -qx 'os_min_ver="7.2-72806"' "$PKG_ROOT/INFO" || fail "wrong os_min_ver"
 grep -qx 'displayname="ExecutorNode"' "$PKG_ROOT/INFO" || fail "missing displayname"
@@ -33,9 +34,17 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || PYTHON_BIN=python
 import json, pathlib, struct, sys
 root = pathlib.Path(sys.argv[1])
 priv = json.loads((root / "conf" / "privilege").read_text())
-assert priv == {"defaults": {"run-as": "package"}}, priv
-resource = json.loads((root / "conf" / "resource").read_text())
-assert resource == {}, resource
+assert priv == {
+    "defaults": {"run-as": "package"},
+    "username": "executornode",
+    "groupname": "executornode",
+    "tool": [{
+        "relpath": "bin/executor-node",
+        "user": "package",
+        "group": "package",
+        "permission": "0700",
+    }],
+}, priv
 for name, dims in [("PACKAGE_ICON.PNG",(64,64)),("PACKAGE_ICON_256.PNG",(256,256))]:
     data=(root/name).read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n", name

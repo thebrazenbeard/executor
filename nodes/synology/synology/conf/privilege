@@ -1,5 +1,13 @@
 {
   "defaults": {
     "run-as": "package"
-  }
+  },
+  "username": "executornode",
+  "groupname": "executornode",
+  "tool": [{
+    "relpath": "bin/executor-node",
+    "user": "package",
+    "group": "package",
+    "permission": "0700"
+  }]
 }
