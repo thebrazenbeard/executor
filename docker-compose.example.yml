@@ -1,0 +1,12 @@
+services:
+  commander:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      EXECUTOR_CLIENT_TOKEN: "${EXECUTOR_CLIENT_TOKEN}"
+      EXECUTOR_DEVICE_TOKEN: "${EXECUTOR_DEVICE_TOKEN}"
+      EXECUTOR_DEFAULT_DEVICE: "${EXECUTOR_DEFAULT_DEVICE:-lappy}"
+    restart: unless-stopped
