@@ -67,12 +67,17 @@
     },
     {
       "id": "EXE-12",
-      "requirement": "Windows runtime start/stop/restart/status scripts preserve 8/64 defaults, do not persist runtime credentials, and fence recorded PIDs by command-line identity before termination.",
+      "requirement": "Windows runtime start/stop/restart/status scripts preserve 8/64 defaults, do not persist runtime credentials, fence recorded PIDs by command-line identity before termination, and require the tunnel client's live /readyz state for a running status.",
       "automated": true
     },
     {
       "id": "EXE-13",
       "requirement": "All checked-in PowerShell operator scripts parse successfully on Windows CI.",
+      "automated": true
+    },
+    {
+      "id": "EXE-14",
+      "requirement": "Windows runtime captures the tunnel client's per-run health URL and re-probes /readyz instead of treating a surviving tunnel process as current readiness.",
       "automated": true
     }
   ]
