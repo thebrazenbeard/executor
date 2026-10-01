@@ -42,9 +42,11 @@ $agent = Join-Path ([string]$config.agent_root) "dist\device-agent.js"
 if (-not (Test-Path -LiteralPath $agent -PathType Leaf)) { throw "Executor device agent not found: $agent" }
 
 $log = Join-Path $logRoot ("device-" + ([string]$config.device_id) + ".log")
+$stdoutLog = Join-Path $logRoot ("device-" + ([string]$config.device_id) + ".out.log")
 try {
-  & $node $agent *>> $log
-  exit $LASTEXITCODE
+  $agentArgument = '"' + $agent + '"'
+  $process = Start-Process -FilePath $node -ArgumentList $agentArgument -WorkingDirectory ([string]$config.agent_root) -PassThru -Wait -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $log
+  exit $process.ExitCode
 }
 finally {
   $env:EXECUTOR_DEVICE_TOKEN = $null
