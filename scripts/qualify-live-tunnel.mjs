@@ -100,7 +100,7 @@ if (maxLogicActive < 64) {
 console.log(JSON.stringify({
   status: "PASS",
   route: "LIVE_REMOTE_TUNNEL",
-  remoteMcpUrl,
+  remoteEndpoint: "configured-at-runtime",
   deviceId,
   calls: 64,
   samples,
