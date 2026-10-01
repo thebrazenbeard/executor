@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "status": "IMPLEMENTATION_ACCEPTANCE_TARGET",
+  "source_binding": {
+    "workbridgecommander_head": "c2b95be79ca011a539c20bfee60fcbc46cfea177",
+    "workbridge_head": "e88e14ea25f25abd723bb50909b3e25e67f889fd",
+    "workbridge_mcp_head": "f091f6be6e85f489e3e7839e10612204b89a4a9e",
+    "desktop_commander_head": "550a0b3e31da18b7cf25e87ed840e3d953b6da42",
+    "desktop_commander_version": "0.2.51",
+    "execution_model": "FULL_AUTHORITY_ONLY"
+  },
+  "requirements": [
+    {
+      "id": "EXE-01",
+      "requirement": "Remote ingress rejects unauthenticated MCP requests.",
+      "automated": true
+    },
+    {
+      "id": "EXE-02",
+      "requirement": "Device attachment rejects unauthenticated registration.",
+      "automated": true
+    },
+    {
+      "id": "EXE-03",
+      "requirement": "Executor exposes full Desktop Commander workstation semantics without a bounded executable or argument-grant mode.",
+      "automated": true
+    },
+    {
+      "id": "EXE-04",
+      "requirement": "Default per-device capacity is 8 parallel execution lanes.",
+      "automated": true
+    },
+    {
+      "id": "EXE-05",
+      "requirement": "Default upstream capacity is 64 parallel logic lanes.",
+      "automated": true
+    },
+    {
+      "id": "EXE-06",
+      "requirement": "Tunnel profile allows at least 64 concurrent upstream requests.",
+      "automated": true
+    },
+    {
+      "id": "EXE-07",
+      "requirement": "Connection generation changes on device replacement and stale generations cannot dispatch effects.",
+      "automated": true
+    },
+    {
+      "id": "EXE-08",
+      "requirement": "Post-dispatch timeout or disconnect is classified OUTCOME_UNKNOWN and is never silently replayed.",
+      "automated": true
+    },
+    {
+      "id": "EXE-09",
+      "requirement": "Operator tunnel/API credentials remain external to repository source.",
+      "automated": true
+    },
+    {
+      "id": "EXE-10",
+      "requirement": "Repository source, deployed tunnel, connected device, and observed workstation effect remain separate evidence classes.",
+      "automated": false
+    }
+  ]
+}
