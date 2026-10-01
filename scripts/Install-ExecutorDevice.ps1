@@ -64,7 +64,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Executor source checkout failed" }
     $sourceCommit = (& $git rev-parse HEAD).Trim()
 
-    & $npm ci --ignore-scripts --no-audit --no-fund
+    & $npm install --ignore-scripts --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw "Executor npm install failed" }
     & $npm run build
     if ($LASTEXITCODE -ne 0) { throw "Executor npm run build failed" }
