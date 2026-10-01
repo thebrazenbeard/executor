@@ -36,3 +36,18 @@ test("headless control plane starts server plus tunnel without requiring a local
   assert.match(status, /\/health/);
   assert.match(status, /\/readyz/);
 });
+
+test("control plane can bootstrap the official OpenAI tunnel-client when it is not on PATH", async () => {
+  const installer = await readFile("scripts/Install-ExecutorTunnelClient.ps1", "utf8");
+  const start = await readFile("scripts/Start-ExecutorControlPlane.ps1", "utf8");
+  const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+
+  assert.match(installer, /api\.github\.com\/repos\/openai\/tunnel-client\/releases\/latest/i);
+  assert.match(installer, /SHA256SUMS\.txt/);
+  assert.match(installer, /Get-FileHash[^\n]*SHA256|SHA256[\s\S]*Get-FileHash/i);
+  assert.match(installer, /windows-(amd64|arm64)/i);
+  assert.match(start, /Install-ExecutorTunnelClient\.ps1/);
+  assert.match(start, /Get-Command[^\n]*TunnelClient[\s\S]*SilentlyContinue/i);
+  assert.match(workflow, /Install-ExecutorTunnelClient\.ps1/);
+  assert.match(workflow, /help quickstart/i);
+});

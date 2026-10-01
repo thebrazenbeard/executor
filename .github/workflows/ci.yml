@@ -46,6 +46,14 @@ jobs:
             }
           }
           if ($failed) { exit 1 }
+      - name: Qualify official OpenAI tunnel-client bootstrap
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "executor-openai-tunnel-client"
+          $installed = (.\scripts\Install-ExecutorTunnelClient.ps1 -RuntimeRoot $root | Out-String | ConvertFrom-Json)
+          & $installed.path help quickstart
+          if ($LASTEXITCODE -ne 0) { throw "OpenAI tunnel-client bootstrap qualification failed" }
       - name: Qualify direct Caddy TLS and WSS device ingress
         if: runner.os == 'Windows'
         shell: powershell
