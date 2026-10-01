@@ -114,6 +114,7 @@ try {
   $env:EXECUTOR_LOGIC_CAPACITY = "64"
   $env:EXECUTOR_INSTALL_ROOT = $dc
   $env:EXECUTOR_TRUSTED_MANIFEST_SHA256 = (Get-FileHash -Algorithm SHA256 $manifestPath).Hash.ToLowerInvariant()
+  $env:EXECUTOR_LEAK_SENTINEL = "executor-ci-secret-must-not-reach-payload"
 
   $server = Start-Process node -ArgumentList "dist/server.js" -PassThru -NoNewWindow
   $health = $null
@@ -156,6 +157,28 @@ try {
   $names = @($listed.result.tools | ForEach-Object { $_.name })
   if ($names -notcontains "start_process") { throw "Desktop Commander start_process missing through Executor" }
   if ($names -notcontains "list_devices") { throw "Executor list_devices missing from routed tool surface" }
+
+  $leakMarker = Join-Path $root "payload-env-leaked.txt"
+  $leakMarkerQuoted = $leakMarker.Replace("'", "''")
+  $probeCommand = "powershell -NoProfile -Command `"if (`$env:EXECUTOR_LEAK_SENTINEL) { Set-Content -LiteralPath '$leakMarkerQuoted' -Value 'LEAKED' }; Write-Output EXECUTOR_ENV_ISOLATION_OK`""
+  $probeBody = @{
+    jsonrpc = "2.0"
+    id = 3
+    method = "tools/call"
+    params = @{
+      name = "start_process"
+      arguments = @{
+        command = $probeCommand
+        timeout_ms = 5000
+      }
+    }
+  } | ConvertTo-Json -Depth 8
+
+  $probe = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:18991/mcp" -Headers $headers -ContentType "application/json" -Body $probeBody
+  if ($probe.error) { throw "payload environment isolation probe returned an MCP error" }
+  if (Test-Path -LiteralPath $leakMarker -PathType Leaf) {
+    throw "Executor credential isolation failed: EXECUTOR_* environment reached a Desktop Commander child process"
+  }
 
   node scripts/qualify-concurrency.mjs
   if ($LASTEXITCODE -ne 0) { throw "8/64 real-payload concurrency qualification failed" }
