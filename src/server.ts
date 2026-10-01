@@ -5,7 +5,7 @@ import { DeviceConnection, DeviceEffectError, DeviceRegistry } from "./device-re
 import { WorkContextOrchestrator } from "./orchestrator.js";
 import type { DeviceHello, DeviceResponse, JsonRpc } from "./protocol.js";
 import { isJsonRpc, isNotification } from "./protocol.js";
-import { capacityConfig, qualificationStatus } from "./config.js";
+import { capacityConfig, qualificationStatus, serverBindConfig } from "./config.js";
 import { isOriginAllowed } from "./security.js";
 import { ResourceKeyGate } from "./resource-gate.js";
 import { JsonlExecutionEventStore } from "./execution-store.js";
@@ -13,8 +13,7 @@ import { EffectLedger } from "./effect-ledger.js";
 import { randomUUID } from "node:crypto";
 import { augmentToolsList, executorListDevicesTool, extractDeviceId, stripDeviceId } from "./tool-routing.js";
 
-const port = Number(process.env.PORT ?? "8787");
-const host = process.env.HOST ?? "0.0.0.0";
+const { port, host } = serverBindConfig();
 const clientToken = process.env.EXECUTOR_CLIENT_TOKEN ?? "";
 const deviceToken = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
 const defaultDevice = process.env.EXECUTOR_DEFAULT_DEVICE ?? "";
