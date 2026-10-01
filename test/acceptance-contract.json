@@ -117,12 +117,17 @@
     },
     {
       "id": "EXE-22",
-      "requirement": "A zero-cost Windows quickstart can wrap the headless Executor control plane with a temporary public HTTPS/WSS Cloudflare Quick Tunnel for device ingress only, persists no runtime credentials, and contains no paid/account/domain fallback.",
+      "requirement": "The zero-cost remote-device path uses direct operator-hosted TLS/WSS with checksum-verified Caddy and no third-party traffic relay; Windows CI proves a real Caddy internal-CA TLS boundary and WSS device hello.",
       "automated": true
     },
     {
       "id": "EXE-23",
-      "requirement": "Installed Windows devices can be repointed to a replacement HTTPS device-ingress endpoint without replacing device identity or credential, and new enrollment prefers the exact local Git HEAD over a mutable branch ref.",
+      "requirement": "Windows enrollment carries the Executor/Caddy public CA separately from the DPAPI-protected per-device token, prefers the exact local Git HEAD, and installed devices can be repointed without changing identity, credential, or CA.",
+      "automated": true
+    },
+    {
+      "id": "EXE-24",
+      "requirement": "Direct runtime attempts Windows Firewall and UPnP TCP mapping but never falls back to a relay; router reachability and CGNAT status remain deployment evidence.",
       "automated": true
     }
   ]

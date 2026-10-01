@@ -114,22 +114,46 @@ See [docs/SETUP.md](docs/SETUP.md) for the self-hosted tunnel and workstation se
 Repository qualification does not prove that a particular private tunnel or workstation is currently online. Runtime activation remains separate evidence.
 
 
-## Zero-cost quickstart
+## Zero-cost, no-relay device ingress
 
-For development and real-device testing without buying a domain or paid hosting, Executor can publish only its device-ingress listener through a temporary Cloudflare Quick Tunnel. The OpenAI Secure MCP Tunnel still carries ChatGPT MCP traffic independently.
+Executor's primary remote-device path is direct TLS. There is no Cloudflare/Tailscale/ngrok/VPS relay in the device traffic path and therefore no third-party per-request, in-flight-request, or relay-bandwidth quota.
+
+On the control-plane Windows machine:
 
 ```powershell
-.\scripts\Start-ExecutorZeroCost.ps1 `
+.\scripts\Start-ExecutorDirect.ps1 `
   -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt" `
   -DeviceId "test-laptop"
 ```
 
-The quickstart starts the headless control plane, obtains a locally installed and Authenticode-verified `cloudflared`, creates a temporary `https://*.trycloudflare.com` device endpoint, verifies its public `/health`, and optionally emits the laptop enrollment command.
+The command:
 
-This path has no paid fallback and requires no purchased domain. Cloudflare Quick Tunnels are a testing/development service: the hostname changes after restart and there is no uptime guarantee. If the endpoint changes, an already-installed Windows device can be repointed without reinstalling:
+- starts the zero-device-capable Executor control plane and OpenAI Secure MCP Tunnel;
+- resolves the public IPv4 address unless `-PublicHost` is supplied;
+- downloads Caddy from its official GitHub release only when needed and verifies the release archive against the official SHA-512 checksum file;
+- keeps Caddy's CA under Executor's persistent runtime directory and does not install that CA into the host-wide trust store;
+- terminates direct TLS on TCP 9443 by default and proxies only `/device` and `/health` to the loopback device listener;
+- attempts a Windows Firewall rule and UPnP TCP mapping;
+- emits an exact-commit-pinned enrollment command containing the public CA certificate and that device's credential.
+
+The enrolled device trusts only the supplied Executor/Caddy CA for this connection; the CA private key never leaves the control-plane host.
+
+Runtime controls:
 
 ```powershell
-.\scripts\Set-ExecutorInstalledDeviceEndpoint.ps1 -ServiceUrl "https://new-host.trycloudflare.com"
+.\scripts\Get-ExecutorDirectStatus.ps1
+.\scripts\Restart-ExecutorDirect.ps1
+.\scripts\Stop-ExecutorDirect.ps1
 ```
 
-New laptop enrollment prefers the exact local Executor Git commit as its source ref, so the generated bootstrap is pinned to the version that produced it unless the operator explicitly supplies `-SourceRef`.
+An already-installed laptop can be pointed at a changed public address without changing its identity, DPAPI-protected credential, or CA:
+
+```powershell
+.\scripts\Set-ExecutorInstalledDeviceEndpoint.ps1 -ServiceUrl "https://203.0.113.10:9443"
+```
+
+### Network boundary
+
+Direct ingress requires an actually reachable public IPv4/TCP path. If UPnP is unavailable, forward the chosen TCP port on the router to the Executor host. If the ISP places the site behind CGNAT and provides no directly reachable address, Executor cannot make inbound direct connectivity appear without introducing a relay; under the no-rate-limited-relay requirement it reports that as a deployment blocker instead of silently falling back.
+
+Repository CI now exercises a real Caddy internal-CA TLS boundary and WSS device hello on Windows in addition to the exact pinned Desktop Commander 8/64 qualification. A particular home/work router and ISP path remain separate runtime evidence.

@@ -122,41 +122,71 @@ The qualifier sends 64 concurrent `start_process` calls through `EXECUTOR_REMOTE
 Repository CI proves source/build behavior and real-payload 8/64 concurrency on its qualification runner. It does not prove that a personal tunnel is currently active or that a specific workstation is currently connected.
 
 
-## Zero-cost remote-laptop quickstart
+## Direct zero-cost remote-device setup
 
-The development/test quickstart keeps recurring infrastructure cost at $0 by using Cloudflare Quick Tunnels only for the separate Executor device-ingress listener.
+This is the preferred remote-laptop path when recurring infrastructure cost must remain $0 and no third-party relay quota is acceptable.
+
+Run on the Windows machine hosting the Executor control plane:
 
 ```powershell
-.\scripts\Start-ExecutorZeroCost.ps1 `
+.\scripts\Start-ExecutorDirect.ps1 `
   -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt"
 ```
 
-To generate enrollment for a laptop in the same command:
+To create a laptop enrollment command at the same time:
 
 ```powershell
-.\scripts\Start-ExecutorZeroCost.ps1 `
+.\scripts\Start-ExecutorDirect.ps1 `
   -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt" `
   -DeviceId "shop-laptop"
 ```
 
-The credential file is read at runtime and the OpenAI API secret is not written to Executor runtime state. If `EXECUTOR_CLIENT_TOKEN` is absent, the wrapper generates an ephemeral one for the control-plane/tunnel-client process pair.
+Default direct TLS port: **9443/TCP**.
 
-The wrapper downloads `cloudflared.exe` only from Cloudflare's official GitHub release path when no signed copy is available, then requires a valid Windows Authenticode signature identifying Cloudflare before execution.
+The direct runtime uses Caddy locally as a TLS terminator. It obtains Caddy from the official GitHub release, verifies the release archive against the official SHA-512 checksum list, persists the internal CA under `%LOCALAPPDATA%\Executor\caddy\data`, and sets `skip_install_trust` so no host-wide certificate trust is required.
 
-Lifecycle commands:
+The generated enrollment command carries the **public CA certificate** and the per-device credential. The Windows installer stores the CA separately in `device-ca.crt`, stores the device token with DPAPI, and configures the Executor agent to use that CA for WSS verification. The Caddy CA private key stays only on the control-plane machine.
+
+### Router/firewall behavior
+
+`Start-ExecutorDirect.ps1` attempts:
+
+1. a Windows Firewall inbound TCP rule for the selected public port;
+2. a UPnP IGD static TCP mapping from that external port to the selected local adapter.
+
+If UPnP is unavailable, the script reports the LAN address and port that must be forwarded manually. This is not treated as a software failure because many routers deliberately disable UPnP.
+
+For a local certificate/route check:
 
 ```powershell
-.\scripts\Get-ExecutorZeroCostStatus.ps1
-.\scripts\Restart-ExecutorZeroCost.ps1 -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt"
-.\scripts\Stop-ExecutorZeroCost.ps1
+.\scripts\Test-ExecutorDirectReachability.ps1 `
+  -PublicDeviceUrl "https://YOUR_PUBLIC_IP:9443" `
+  -CaCertificatePath "$env:LOCALAPPDATA\Executor\caddy\data\caddy\pki\authorities\local\root.crt" `
+  -ResolveToLoopback
 ```
 
-A Quick Tunnel restart normally changes the public `trycloudflare.com` hostname. Repoint an already-installed Windows node with:
+For actual external evidence, run the same command from a different network **without** `-ResolveToLoopback`, using a copy of the public root certificate.
+
+If the network is behind CGNAT and has no externally reachable address, direct ingress is not possible from that network without a relay. Executor intentionally has no automatic relay fallback.
+
+### Direct runtime lifecycle
 
 ```powershell
-.\scripts\Set-ExecutorInstalledDeviceEndpoint.ps1 -ServiceUrl "https://new-host.trycloudflare.com"
+.\scripts\Get-ExecutorDirectStatus.ps1
+.\scripts\Restart-ExecutorDirect.ps1
+.\scripts\Stop-ExecutorDirect.ps1
 ```
 
-That command changes only the non-secret service URL and restarts the existing `Executor Device` scheduled task. It does not replace the device ID, device credential, agent, or Desktop Commander payload.
+The Caddy data directory survives restart, so a new public IP can receive a new leaf certificate under the same Executor CA. Existing devices only need their endpoint updated:
 
-This quickstart deliberately has no paid, domain-purchase, or metered-service fallback. A stable production hostname is a separate deployment choice.
+```powershell
+.\scripts\Set-ExecutorInstalledDeviceEndpoint.ps1 -ServiceUrl "https://NEW_PUBLIC_IP:9443"
+```
+
+The endpoint update does not rotate the device token, replace the CA, or reinstall Desktop Commander.
+
+### Evidence boundary
+
+Windows CI performs a real local qualification through checksum-verified Caddy, Caddy's internal CA, TLS, WSS, Executor `/device`, and a device hello. CI also separately qualifies the exact pinned Desktop Commander payload at 8 execution lanes / 64 logic lanes.
+
+CI cannot prove that your router accepts the port mapping, your ISP is not using CGNAT, or a particular remote laptop is online. Those are deployment/runtime evidence.
