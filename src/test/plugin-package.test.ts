@@ -39,3 +39,16 @@ test("self-hosted tunnel profile keeps credentials external and allows 64 upstre
   assert.match(launcher, /doctor --profile-file/);
   assert.match(launcher, /run --profile-file/);
 });
+
+
+test("Executor installer preserves full-authority 8/64 semantics", async () => {
+  const installer = await readFile("scripts/Install-ExecutorDesktopCommander.ps1", "utf8");
+
+  assert.match(installer, /EXECUTOR_DESKTOP_COMMANDER_PAYLOAD_V1/);
+  assert.match(installer, /full_authority_only = \$true/);
+  assert.match(installer, /unrestricted_command_string_shell = \$true/);
+  assert.match(installer, /executor_execution_lanes = 8/);
+  assert.match(installer, /executor_logic_lanes = 64/);
+  assert.equal(installer.includes("workbridge-process-admission"), false);
+  assert.equal(installer.includes("bounded-process-concurrency"), false);
+});
