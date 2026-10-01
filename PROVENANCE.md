@@ -12,3 +12,7 @@ Donor heads used for V1:
 The WorkBridgeMCP donor material pins `wonderwhy-er/DesktopCommanderMCP@550a0b3e31da18b7cf25e87ed840e3d953b6da42`, package version `0.2.51`, under MIT.
 
 Executor preserves the full Desktop Commander workstation semantics. The bounded WorkBridge executable-grant runtime is intentionally excluded.
+
+Transport readiness reference:
+
+- `openai/tunnel-client@c8aeedec334db55bbd69bb16db6b71276993d708` — `/readyz` and `HEALTH_URL_FILE` behavior used by Executor's Windows runtime status path.
