@@ -16,3 +16,7 @@ Executor preserves the full Desktop Commander workstation semantics. The bounded
 Transport readiness reference:
 
 - `openai/tunnel-client@c8aeedec334db55bbd69bb16db6b71276993d708` — `/readyz` and `HEALTH_URL_FILE` behavior used by Executor's Windows runtime status path.
+
+Hermetic qualification/install bootstrap:
+
+- Executor ports only the pinned ripgrep-cache bootstrap from `WorkBridgeMCP@f091f6be6e85f489e3e7839e10612204b89a4a9e`: `@vscode/ripgrep` package cache `1.17.0`, release `v15.0.0`, with architecture-specific SHA-256 verification before rebuild. The WorkBridge bounded process overlay is not imported.
