@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-ARTIFACT="${1:-$SCRIPT_DIR/build/spk/ExecutorNode-armada38x-0.1.0-0001.spk}"
+ARTIFACT="${1:-$SCRIPT_DIR/build/spk/ExecutorNode-armada38x-0.1.0-0002.spk}"
 PYTHON_BIN="${PYTHON:-python3}"
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || PYTHON_BIN=python
 
@@ -49,9 +49,9 @@ with tempfile.TemporaryDirectory() as tmp:
     info = (tmp_path / "INFO").read_text()
     expected_info = {
         "package": "ExecutorNode",
-        "version": "0.1.0-0001",
+        "version": "0.1.0-0002",
         "arch": "armada38x",
-        "os_min_ver": "7.2.2-72806",
+        "os_min_ver": "7.2-72806",
         "maintainer": "thebrazenbeard",
         "description": "Executor Synology storage node",
     }

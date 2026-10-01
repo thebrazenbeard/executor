@@ -20,9 +20,10 @@ do
 done
 
 grep -qx 'package="ExecutorNode"' "$PKG_ROOT/INFO" || fail "wrong package field"
-grep -qx 'version="0.1.0-0001"' "$PKG_ROOT/INFO" || fail "wrong version field"
+grep -qx 'version="0.1.0-0002"' "$PKG_ROOT/INFO" || fail "wrong version field"
 grep -qx 'arch="armada38x"' "$PKG_ROOT/INFO" || fail "wrong arch field"
-grep -qx 'os_min_ver="7.2.2-72806"' "$PKG_ROOT/INFO" || fail "wrong os_min_ver"
+grep -qx 'os_min_ver="7.2-72806"' "$PKG_ROOT/INFO" || fail "wrong os_min_ver"
+grep -qx 'displayname="ExecutorNode"' "$PKG_ROOT/INFO" || fail "missing displayname"
 grep -qx 'maintainer="thebrazenbeard"' "$PKG_ROOT/INFO" || fail "wrong maintainer"
 grep -qx 'description="Executor Synology storage node"' "$PKG_ROOT/INFO" || fail "wrong description"
 

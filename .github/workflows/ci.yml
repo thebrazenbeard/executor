@@ -81,6 +81,6 @@ jobs:
       - name: Upload ExecutorNode SPK
         uses: actions/upload-artifact@v4
         with:
-          name: ExecutorNode-armada38x-0.1.0-0001.spk
-          path: nodes/synology/build/spk/ExecutorNode-armada38x-0.1.0-0001.spk
+          name: ExecutorNode-armada38x-0.1.0-0002.spk
+          path: nodes/synology/build/spk/ExecutorNode-armada38x-0.1.0-0002.spk
           if-no-files-found: error

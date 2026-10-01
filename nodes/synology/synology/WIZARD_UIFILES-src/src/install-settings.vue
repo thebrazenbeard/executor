@@ -30,13 +30,15 @@ export default defineComponent({
     const executorUrl = ref('');
     const deviceId = ref('DS216');
     const deviceToken = ref('');
-    const shareRoots = ref('/volume1/');
+    const shareRoots = ref('');
     const headline = 'Executor Node Setup';
 
     const isValid = () => {
       const urlOkay = /^https:\/\/[^\s/]+/i.test(executorUrl.value.trim());
       const deviceOkay = /^[A-Za-z0-9._:-]{1,128}$/.test(deviceId.value.trim());
-      return urlOkay && deviceOkay && deviceToken.value.length > 0;
+      const roots = shareRoots.value.split(',').map(v => v.trim()).filter(Boolean);
+      const rootsOkay = roots.length > 0 && roots.every(v => /^\/volume[1-9][0-9]*\/[^/@][^/]*(?:\/.*)?$/.test(v));
+      return urlOkay && deviceOkay && deviceToken.value.length > 0 && rootsOkay;
     };
 
     const checkState = (owner) => {

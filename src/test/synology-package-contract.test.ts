@@ -43,7 +43,7 @@ test("Synology acceptance requirements and CI artifact are explicit", async () =
     assert.equal(ids.has(id), true, `missing ${id}`);
   }
 
-  assert.match(workflow, /ExecutorNode-armada38x-0\.1\.0-0001\.spk/);
+  assert.match(workflow, /ExecutorNode-armada38x-0\.1\.0-0002\.spk/);
   assert.match(workflow, /actions\/upload-artifact@/);
   assert.match(workflow, /bash nodes\/synology\/validate-spk\.sh/);
   assert.match(workflow, /go test \.\/\.\.\./);

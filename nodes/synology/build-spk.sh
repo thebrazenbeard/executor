@@ -6,7 +6,7 @@ PKG_SRC="$SCRIPT_DIR/synology"
 BUILD_ROOT="${EXECUTOR_SPK_BUILD_DIR:-$SCRIPT_DIR/build/spk}"
 PAYLOAD="$BUILD_ROOT/payload"
 STAGE="$BUILD_ROOT/stage"
-ARTIFACT="$BUILD_ROOT/ExecutorNode-armada38x-0.1.0-0001.spk"
+ARTIFACT="$BUILD_ROOT/ExecutorNode-armada38x-0.1.0-0002.spk"
 
 command -v go >/dev/null 2>&1 || {
   echo "go is required" >&2
