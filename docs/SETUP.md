@@ -69,7 +69,7 @@ Executor injects an optional `deviceId` argument into downstream workstation too
 
 Repository CI proves the Executor service and the pinned Desktop Commander payload at **8 parallel execution lanes** and **64 parallel logic lanes**, but that does not prove your actual tunnel/control-plane path can sustain the same overlap.
 
-With the normal Executor runtime already running, provide the external MCP endpoint and target workstation:
+With the normal Executor runtime already running, provide the external **non-loopback HTTPS** MCP endpoint and target workstation:
 
 ```powershell
 $env:EXECUTOR_REMOTE_MCP_URL = "https://your-live-remote-mcp-endpoint/mcp"
@@ -82,7 +82,7 @@ npm run qualify:live-tunnel
 
 The qualifier sends 64 concurrent `start_process` calls through `EXECUTOR_REMOTE_MCP_URL` and samples the authenticated local Executor `/health` counters using the already configured `EXECUTOR_CLIENT_TOKEN`. It passes only if the live path observes at least 8 simultaneous execution effects and 64 simultaneous logic lanes.
 
-`EXECUTOR_REMOTE_AUTHORIZATION` is optional and is never written to repository state. The harness is deliberately excluded from ordinary GitHub Actions because CI does not possess your live tunnel identity or credentials.
+`EXECUTOR_REMOTE_AUTHORIZATION` is optional and is never written to repository state. Credentials embedded directly in the remote URL are rejected; use the authorization variable instead when the endpoint requires a header. Loopback and plaintext URLs are also rejected so local traffic cannot be mislabeled as live-tunnel evidence. The harness is deliberately excluded from ordinary GitHub Actions because CI does not possess your live tunnel identity or credentials.
 
 ## Evidence boundary
 
