@@ -5,7 +5,7 @@ import WebSocket from "ws";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-test("official MCP client initializes through Executor and forwards workstation tools", { timeout: 30_000 }, async () => {
+test("Executor exposes RDC-style device routing while preserving downstream tool semantics", { timeout: 30_000 }, async () => {
   const port = 18787 + Math.floor(Math.random() * 1000);
   const child = spawn(process.execPath, ["dist/server.js"], {
     env: {
@@ -31,6 +31,7 @@ test("official MCP client initializes through Executor and forwards workstation 
   });
 
   const forwardedMethods: string[] = [];
+  const forwardedToolArguments: Record<string, unknown>[] = [];
   const ws = new WebSocket(`ws://127.0.0.1:${port}/device`);
 
   await new Promise<void>((resolve, reject) => {
@@ -53,9 +54,27 @@ test("official MCP client initializes through Executor and forwards workstation 
       const p = m.payload;
       if (typeof p.method === "string") forwardedMethods.push(p.method);
       let result: unknown = {};
+
       if (p.method === "tools/list") {
-        result = { tools: [{ name: "echo", description: "fake", inputSchema: { type: "object", properties: {} } }] };
+        result = {
+          tools: [{
+            name: "echo",
+            description: "fake",
+            inputSchema: {
+              type: "object",
+              properties: { message: { type: "string" } },
+              required: ["message"]
+            }
+          }]
+        };
       }
+
+      if (p.method === "tools/call") {
+        const args = p.params?.arguments ?? {};
+        forwardedToolArguments.push(args);
+        result = { content: [{ type: "text", text: JSON.stringify(args) }] };
+      }
+
       if (p.id !== undefined) {
         ws.send(JSON.stringify({
           type: "response",
@@ -75,21 +94,50 @@ test("official MCP client initializes through Executor and forwards workstation 
   try {
     await client.connect(transport);
     const listed = await client.listTools();
-    assert.equal(listed.tools.some(t => t.name === "echo"), true);
-    assert.equal(forwardedMethods.includes("initialize"), false);
-    assert.equal(forwardedMethods.includes("notifications/initialized"), false);
-    assert.equal(forwardedMethods.filter(m => m === "tools/list").length, 1);
 
-    const badDevice = await fetch(`http://127.0.0.1:${port}/mcp`, {
+    const echo = listed.tools.find(t => t.name === "echo");
+    assert.ok(echo);
+    assert.equal((echo.inputSchema as any).properties.deviceId.type, "string");
+    assert.equal(listed.tools.some(t => t.name === "list_devices"), true);
+
+    const devicesResponse = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: "POST",
       headers: {
         authorization: "Bearer client-test",
         "content-type": "application/json",
-        "x-executor-device": "../bad device"
+        "x-executor-device": "fake"
       },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 91, method: "tools/list", params: {} })
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 50,
+        method: "tools/call",
+        params: { name: "list_devices", arguments: {} }
+      })
     });
-    assert.equal(badDevice.status, 400);
+    const devicesBody = await devicesResponse.json() as any;
+    assert.equal(devicesBody.result.structuredContent.devices[0].deviceId, "fake");
+
+    const routedResponse = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer client-test",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 51,
+        method: "tools/call",
+        params: {
+          name: "echo",
+          arguments: { message: "hello", deviceId: "fake" }
+        }
+      })
+    });
+    assert.equal(routedResponse.status, 200);
+    assert.deepEqual(forwardedToolArguments.at(-1), { message: "hello" });
+
+    assert.equal(forwardedMethods.includes("initialize"), false);
+    assert.equal(forwardedMethods.includes("notifications/initialized"), false);
   } finally {
     await client.close().catch(() => {});
     ws.close();
