@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/admin"
+	"github.com/thebrazenbeard/executor/nodes/synology/internal/change"
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/protocol"
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/storage"
 )
@@ -26,10 +27,20 @@ func WithAdmin(reader *admin.Reader) Option {
 	return func(h *Handler) { h.admin = reader }
 }
 
+func WithChanges(engine *change.Engine) Option {
+	return func(h *Handler) { h.changes = engine }
+}
+
+func WithGenerationProvider(provider func() int) Option {
+	return func(h *Handler) { h.generation = provider }
+}
+
 type Handler struct {
-	version string
-	storage *storage.Manager
-	admin   *admin.Reader
+	version    string
+	storage    *storage.Manager
+	admin      *admin.Reader
+	changes    *change.Engine
+	generation func() int
 }
 
 func NewHandler(version string, options ...Option) *Handler {
@@ -92,7 +103,7 @@ func (h *Handler) Handle(_ context.Context, request protocol.JSONRPC) (DispatchR
 		if strings.HasPrefix(params.Name, "storage.") && h.storage != nil {
 			return h.callStorageTool(request.ID, params.Name, params.Arguments), nil
 		}
-		if strings.HasPrefix(params.Name, "admin.") && h.admin != nil {
+		if strings.HasPrefix(params.Name, "admin.") && (h.admin != nil || h.changes != nil) {
 			return h.callAdminTool(request.ID, params.Name, params.Arguments), nil
 		}
 		return rpcError(request.ID, -32601, "unknown tool: "+params.Name), nil
