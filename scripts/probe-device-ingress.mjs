@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import https from "node:https";
-import net from "node:net";
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -10,10 +9,11 @@ function argValue(name) {
 
 const urlText = argValue("--url");
 const caPath = argValue("--ca");
+const tlsServerName = argValue("--server-name");
 const resolveToLoopback = process.argv.includes("--resolve-to-loopback");
 
 if (!urlText || !caPath) {
-  console.error("usage: node probe-device-ingress.mjs --url <https-url> --ca <root-ca.pem> [--resolve-to-loopback]");
+  console.error("usage: node probe-device-ingress.mjs --url <https-url> --ca <root-ca.pem> [--server-name <tls-name>] [--resolve-to-loopback]");
   process.exit(2);
 }
 
@@ -25,6 +25,9 @@ if (target.protocol !== "https:") {
 
 const ca = await readFile(caPath);
 const port = target.port ? Number(target.port) : 443;
+const hostHeader = tlsServerName
+  ? tlsServerName + (port !== 443 ? `:${port}` : "")
+  : target.host;
 
 const options = {
   protocol: "https:",
@@ -34,15 +37,15 @@ const options = {
   method: "GET",
   ca,
   rejectUnauthorized: true,
-  headers: { accept: "application/json" },
   timeout: 5000,
+  headers: { accept: "application/json", Host: hostHeader },
+  ...(tlsServerName ? { servername: tlsServerName } : {}),
   ...(resolveToLoopback
     ? {
         lookup: (_hostname, _options, callback) =>
           callback(null, "127.0.0.1", 4),
       }
     : {}),
-  ...(net.isIP(target.hostname) ? {} : { servername: target.hostname }),
 };
 
 const result = await new Promise((resolve, reject) => {
@@ -76,5 +79,6 @@ process.stdout.write(JSON.stringify({
   status: "PASS",
   endpoint: target.origin,
   role: result.role,
+  tls_server_name: tlsServerName || null,
   resolve_to_loopback: resolveToLoopback,
 }) + "\n");
