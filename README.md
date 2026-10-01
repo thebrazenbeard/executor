@@ -89,7 +89,7 @@ On Windows, Executor includes explicit runtime controls so the service is not a 
 .\scripts\Stop-ExecutorRuntime.ps1
 ```
 
-Startup verifies the server, workstation attachment, and private-tunnel MCP session before reporting ready. State contains no API keys or bearer credentials, and stop/restart fence recorded PIDs against their current command lines.
+Startup verifies the server, workstation attachment, private-tunnel MCP session, and the tunnel client's live `/readyz` endpoint before reporting ready. Runtime status re-probes `/readyz` rather than equating a surviving tunnel process with a healthy tunnel. State contains no API keys or bearer credentials, and stop/restart fence recorded PIDs against their current command lines.
 
 ## Status
 
