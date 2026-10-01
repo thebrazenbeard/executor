@@ -147,7 +147,7 @@
     },
     {
       "id": "EXE-28",
-      "requirement": "ExecutorNode restart is response-gated and generation-aware: startup failure leaves the parent alive, successful handoff starts/releases/shuts down exactly once, connection timeout kills the replacement without killing the parent, and automated qualification repeats the real replacement-process handoff twenty times.",
+      "requirement": "ExecutorNode restart is response-gated and generation-aware: the immediate apply response reports pendingVerification=true and verified=false, startup failure leaves the parent alive, successful handoff starts/releases/shuts down exactly once, connection timeout kills the replacement without killing the parent, post-reconnect checks establish completion, and automated qualification repeats the real replacement-process handoff twenty times.",
       "automated": true
     }
   ]

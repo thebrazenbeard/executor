@@ -18,10 +18,10 @@ type ApplyOutcome struct {
 
 type Adapter interface {
 	Target() string
-	ReadCurrent(context.Context,json.RawMessage)(map[string]any,error)
-	Describe(map[string]any,json.RawMessage)(ProposalDescription,error)
-	Apply(context.Context,json.RawMessage)(ApplyOutcome,error)
-	ReadBack(context.Context,json.RawMessage)(map[string]any,error)
+	ReadCurrent(context.Context, json.RawMessage) (map[string]any, error)
+	Describe(map[string]any, json.RawMessage) (ProposalDescription, error)
+	Apply(context.Context, json.RawMessage) (ApplyOutcome, error)
+	ReadBack(context.Context, json.RawMessage) (map[string]any, error)
 }
 
 type Proposal struct {
@@ -37,9 +37,10 @@ type Proposal struct {
 }
 
 type ApplyResult struct {
-	ChangeID      string         `json:"changeId"`
-	Target        string         `json:"target"`
-	Observed      map[string]any `json:"observed"`
-	Verified      bool           `json:"verified"`
-	AfterResponse func()         `json:"-"`
+	ChangeID            string         `json:"changeId"`
+	Target              string         `json:"target"`
+	Observed            map[string]any `json:"observed"`
+	Verified            bool           `json:"verified"`
+	PendingVerification bool           `json:"pendingVerification"`
+	AfterResponse       func()         `json:"-"`
 }

@@ -25,6 +25,7 @@ For a `synology-storage` device, storage content operations inside granted roots
 2. Present the returned current state, proposed state, side effects, recovery information, expiration, and change ID to the user.
 3. Obtain **explicit user approval for that exact proposal**.
 4. Never call `admin.apply_change` without explicit user approval for the still-current change ID.
-5. After apply, verify the observed state. For reconnect/restart, verify the new device generation and re-check representative tools after the node returns.
+5. For deferred actions such as reconnect/restart, treat `pendingVerification: true` and `verified: false` as the expected immediate apply result; do not describe the mutation as completed yet.
+6. After the node returns, verify the new device generation and re-check representative storage/admin tools before treating the restart/reconnect as verified.
 
 Do not reinterpret approval for one change ID as approval for another target, modified parameters, or a newly prepared replacement proposal.

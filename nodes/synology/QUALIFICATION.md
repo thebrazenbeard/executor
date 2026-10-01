@@ -90,7 +90,7 @@ For each restart cycle:
 4. Verify no restart occurs before user approval.
 5. Obtain explicit user approval for that exact proposal/change ID.
 6. Call `admin.apply_change`.
-7. Require the successful apply response to arrive before the old device connection disappears.
+7. Require the apply response to arrive before the old device connection disappears, with `pendingVerification: true` and `verified: false`; this is an accepted handoff, not proof the restart has completed.
 8. Observe the device temporarily disconnect/reconnect as applicable; never replay the restart call.
 9. Require the returning device to report generation N+1 exactly—not N and not a jump caused by duplicate replacement processes.
 10. Require `ping` and `tools/list` after reconnect.

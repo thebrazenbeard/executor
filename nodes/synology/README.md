@@ -73,7 +73,7 @@ Synology's documented Vue 2-era development stack is EOL and its pinned build de
 
 ## Restart qualification
 
-ExecutorNode restart is a verified mutation. A replacement process initializes behind a gate; the apply response is written before release; the new connection reports a new generation; then the old process exits.
+ExecutorNode restart is a verified mutation with deferred completion. A replacement process initializes behind a gate; the immediate apply response is written before release and reports `pendingVerification: true, verified: false`; the new connection reports a new generation; only the post-reconnect checks establish completed verification, then the old process exits.
 Automated tests cover startup failure, replacement connection timeout, duplicate release prevention, stale-generation proposal rejection, state drift, concurrent double-apply, and twenty consecutive real replacement-process handoffs. Local development also supports repeating that twenty-cycle test multiple times.
 
 Physical DS216 qualification repeats an approved restart three times and checks for a single generation increment, no duplicate/orphaned process, and working storage/admin tools after each reconnect.
