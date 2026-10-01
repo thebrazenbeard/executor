@@ -1,0 +1,7 @@
+# Replace devices.example.com with the DNS name dedicated to Executor workstation ingress.
+# This proxy exposes only the device listener. Keep the MCP listener on 127.0.0.1:8787
+# for OpenAI tunnel-client.
+
+devices.example.com {
+  reverse_proxy 127.0.0.1:8788
+}

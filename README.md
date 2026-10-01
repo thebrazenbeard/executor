@@ -17,11 +17,15 @@ AI controller
        |
        | MCP requests
        v
-Executor remote ingress
+Executor control plane
        |
-       | authenticated device attachment
-       v
-Executor device agent
+       +--> private /mcp listener <-- OpenAI Secure MCP Tunnel
+       |
+       +--> TLS-fronted /device listener
+                    |
+                    | authenticated outbound attachment
+                    v
+             Executor device agent
        |
        | exact MCP forwarding
        v
@@ -63,7 +67,7 @@ Executor keeps parallel logic-lane concurrency separate from workstation-effect 
 Executor distinguishes three important states:
 
 - **FAILED** — the effect was not dispatched or is known not to have occurred.
-- **SUCCEEDED** — a result was observed for the dispatched effect.
+- **COMPLETED** — a result was observed for the dispatched effect.
 - **OUTCOME_UNKNOWN** — the effect may have occurred, but the connection failed or timed out after dispatch.
 
 `OUTCOME_UNKNOWN` effects are never silently replayed. Reconciliation must establish current state first.
@@ -80,16 +84,26 @@ Exact donor heads are recorded in [PROVENANCE.md](PROVENANCE.md).
 
 ## Operator runtime
 
-On Windows, Executor includes explicit runtime controls so the service is not a collection of mystery background processes:
+The primary runtime is now the **headless control plane**. It starts Executor plus the OpenAI Secure MCP Tunnel and remains online with zero workstations connected:
 
 ```powershell
-.\scripts\Start-ExecutorRuntime.ps1
-.\scripts\Get-ExecutorStatus.ps1
-.\scripts\Restart-ExecutorRuntime.ps1
-.\scripts\Stop-ExecutorRuntime.ps1
+.\scripts\Start-ExecutorControlPlane.ps1
+.\scripts\Get-ExecutorControlPlaneStatus.ps1
+.\scripts\Restart-ExecutorControlPlane.ps1
+.\scripts\Stop-ExecutorControlPlane.ps1
 ```
 
-Startup verifies the server, workstation attachment, private-tunnel MCP session, and the tunnel client's live `/readyz` endpoint before reporting ready. Runtime status re-probes `/readyz` rather than equating a surviving tunnel process with a healthy tunnel. State contains no API keys or bearer credentials, and stop/restart fence recorded PIDs against their current command lines.
+The MCP listener stays private/loopback-first for `tunnel-client`. Remote laptops use a separate device-ingress listener, normally placed behind HTTPS/WSS termination. Secure MCP Tunnel is intentionally not treated as a generic device relay.
+
+To authorize a Windows laptop, generate a per-device credential on the control-plane host:
+
+```powershell
+.\scripts\New-ExecutorDeviceEnrollment.ps1 -DeviceId "shop-laptop" -DeviceServiceUrl "https://devices.example.com"
+```
+
+The script updates the live credential file and prints a bootstrap PowerShell command. Run that command on the target laptop. The laptop receives only its device credential and device-ingress URL—never the tunnel ID or tunnel API secret. The installer builds the Executor agent and exact pinned Desktop Commander payload, protects the device token with Windows DPAPI, registers a current-user logon task, and attaches outbound.
+
+The older `Start-ExecutorRuntime.ps1` all-in-one server+local-device+tunnel launcher remains as a convenience for single-machine development and qualification.
 
 ## Status
 

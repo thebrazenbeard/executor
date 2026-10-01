@@ -60,6 +60,7 @@ if (-not $env:PORT) { $env:PORT = "8787" }
 if (-not $env:EXECUTOR_DEVICE_HOST) { $env:EXECUTOR_DEVICE_HOST = "127.0.0.1" }
 if (-not $env:EXECUTOR_DEVICE_PORT) { $env:EXECUTOR_DEVICE_PORT = "8788" }
 
+$originalDeviceTokenFile = [Environment]::GetEnvironmentVariable("EXECUTOR_DEVICE_TOKENS_FILE")
 $sharedDeviceToken = [Environment]::GetEnvironmentVariable("EXECUTOR_DEVICE_TOKEN")
 $deviceTokenMap = [Environment]::GetEnvironmentVariable("EXECUTOR_DEVICE_TOKENS_JSON")
 $deviceTokenFile = [Environment]::GetEnvironmentVariable("EXECUTOR_DEVICE_TOKENS_FILE")
@@ -75,7 +76,6 @@ $originalControlTunnel = [Environment]::GetEnvironmentVariable("CONTROL_PLANE_TU
 $originalControlKey = [Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY")
 $originalExtraHeaders = [Environment]::GetEnvironmentVariable("MCP_EXTRA_HEADERS")
 $originalHealthUrlFile = [Environment]::GetEnvironmentVariable("HEALTH_URL_FILE")
-$originalDeviceTokenFile = [Environment]::GetEnvironmentVariable("EXECUTOR_DEVICE_TOKENS_FILE")
 
 $server = $null
 $tunnel = $null

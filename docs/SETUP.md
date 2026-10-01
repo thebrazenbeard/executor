@@ -1,6 +1,6 @@
 # Executor setup
 
-Executor provides a self-hosted remote MCP path to a full Desktop Commander workstation payload.
+Executor provides a self-hosted remote MCP path to full Desktop Commander workstation payloads. The control plane and workstation devices are independent: ChatGPT reaches the private MCP listener through Secure MCP Tunnel, while laptops connect outbound to a separate authenticated device-ingress listener.
 
 ## Build
 
@@ -20,17 +20,50 @@ The installer builds the exact pinned Desktop Commander source and prints the SH
 
 The installer intentionally does not apply the donor WorkBridge four-process overlay. Executor's qualified baseline is 8 parallel execution lanes and 64 parallel logic lanes.
 
-## Start the service
+## Start the headless control plane
 
-Configure `EXECUTOR_CLIENT_TOKEN`, `EXECUTOR_EXECUTION_CAPACITY=8`, `EXECUTOR_LOGIC_CAPACITY=64`, and the allowed browser origin. For device ingress, configure either a shared `EXECUTOR_DEVICE_TOKEN`, `EXECUTOR_DEVICE_TOKENS_JSON` as a JSON object mapping device IDs to tokens, or both. A mapped device ID requires its mapped token and cannot fall back to the shared token. Start Executor with `npm start`.
+Set `EXECUTOR_CLIENT_TOKEN`, `EXECUTOR_TUNNEL_ID`, and `EXECUTOR_TUNNEL_API_SECRET`, then build Executor and run:
 
-For the private tunnel-first path, bind the service to loopback on port 8787.
+```powershell
+.\scripts\Start-ExecutorControlPlane.ps1
+```
 
-## Attach a workstation
+This starts only the Executor server and `tunnel-client`; it does **not** require `EXECUTOR_DEVICE_ID`, a Desktop Commander install, or any workstation to be online. The default profile remains 8 execution lanes per device and 64 logic lanes.
 
-Run `scripts/Start-ExecutorDevice.ps1` with the Executor service URL, a device ID, the device token, the trusted manifest SHA-256, and the Desktop Commander install root.
+The MCP listener defaults to `127.0.0.1:8787`. The separate device-ingress listener defaults to `127.0.0.1:8788`. Put only the device listener behind your HTTPS/WSS reverse proxy. Do not publish the private MCP listener just to enroll laptops.
 
-Connected devices are visible through `list_devices`. Executor remains connectable and exposes `list_devices` even when all workstation agents are offline.
+For device authorization, use one of:
+- `EXECUTOR_DEVICE_TOKENS_FILE` — recommended for RDC-like live enrollment; re-read on every new device hello.
+- `EXECUTOR_DEVICE_TOKENS_JSON` — static per-device map supplied at process start.
+- `EXECUTOR_DEVICE_TOKEN` — optional shared fallback for an intentionally shared trust domain.
+
+If none is supplied to `Start-ExecutorControlPlane.ps1`, it creates `%LOCALAPPDATA%\Executor\device-tokens.json` containing an empty object and points Executor at that file, so the control plane can come online with zero devices.
+
+## Enroll any Windows laptop
+
+On the control-plane host, generate a credential and bootstrap command:
+
+```powershell
+.\scripts\New-ExecutorDeviceEnrollment.ps1 `
+  -DeviceId "shop-laptop" `
+  -DeviceServiceUrl "https://devices.example.com"
+```
+
+The credential file is updated atomically and the running server will accept the new mapping without restart. The returned bootstrap command contains that laptop's device credential; treat the command as a secret until it has been used on the intended machine.
+
+Run the printed command in PowerShell on the laptop. The current Windows bootstrap requires `git`, `node`, and `npm` on PATH. It:
+1. fetches and builds Executor;
+2. builds the exact pinned Desktop Commander payload;
+3. stores only non-secret device configuration in `%LOCALAPPDATA%\Executor\device.json`;
+4. protects the device token with Windows DPAPI in `device-token.dpapi`;
+5. registers a current-user `Executor Device` logon task; and
+6. starts the device agent immediately.
+
+The laptop does not need the OpenAI tunnel ID, runtime API secret, or Executor client bearer. It needs only the TLS device-ingress URL, its device ID, and its own device credential.
+
+Connected devices are visible from the ChatGPT Executor MCP surface through `list_devices`. Executor remains connectable and exposes `list_devices` when all workstation agents are offline.
+
+For same-machine development, `scripts/Start-ExecutorDevice.ps1` remains available as a direct launcher.
 
 ## Start the private tunnel
 

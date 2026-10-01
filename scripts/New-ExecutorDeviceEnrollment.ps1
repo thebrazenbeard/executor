@@ -1,0 +1,84 @@
+param(
+  [Parameter(Mandatory=$true)][string]$DeviceId,
+  [Parameter(Mandatory=$true)][string]$DeviceServiceUrl,
+  [string]$CredentialFile = "",
+  [string]$SourceRef = "build/executor-v1"
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+if ($DeviceId -notmatch '^[A-Za-z0-9._:-]{1,128}$') {
+  throw "DeviceId must match ^[A-Za-z0-9._:-]{1,128}$"
+}
+
+$uri = $null
+if (-not [Uri]::TryCreate($DeviceServiceUrl, [UriKind]::Absolute, [ref]$uri)) {
+  throw "DeviceServiceUrl must be an absolute URL"
+}
+$loopback = $uri.Scheme -eq "http" -and @("127.0.0.1","localhost","::1") -contains $uri.Host
+if ($uri.Scheme -ne "https" -and -not $loopback) {
+  throw "DeviceServiceUrl must use HTTPS except for loopback testing"
+}
+if (-not [string]::IsNullOrEmpty($uri.UserInfo)) {
+  throw "DeviceServiceUrl must not embed credentials"
+}
+
+if ([string]::IsNullOrWhiteSpace($CredentialFile)) {
+  $CredentialFile = [Environment]::GetEnvironmentVariable("EXECUTOR_DEVICE_TOKENS_FILE")
+}
+if ([string]::IsNullOrWhiteSpace($CredentialFile)) {
+  $CredentialFile = Join-Path (Join-Path $env:LOCALAPPDATA "Executor") "device-tokens.json"
+}
+
+$parent = Split-Path -Parent $CredentialFile
+if ($parent) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+
+$tokens = @{}
+if (Test-Path -LiteralPath $CredentialFile -PathType Leaf) {
+  $raw = Get-Content -Raw -Encoding UTF8 -LiteralPath $CredentialFile
+  if (-not [string]::IsNullOrWhiteSpace($raw)) {
+    $parsed = $raw | ConvertFrom-Json
+    foreach ($property in $parsed.PSObject.Properties) {
+      if ($property.Name -notmatch '^[A-Za-z0-9._:-]{1,128}$') { throw "invalid device id in credential file: $($property.Name)" }
+      $tokens[$property.Name] = [string]$property.Value
+    }
+  }
+}
+
+$bytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+$token = [Convert]::ToBase64String($bytes).TrimEnd("=").Replace("+","-").Replace("/","_")
+$tokens[$DeviceId] = $token
+
+$temp = "$CredentialFile.tmp.$([Guid]::NewGuid().ToString("N"))"
+try {
+  $tokens | ConvertTo-Json -Compress | Set-Content -LiteralPath $temp -Encoding UTF8
+  Move-Item -LiteralPath $temp -Destination $CredentialFile -Force
+}
+finally {
+  Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+}
+
+function Quote-PowerShell([string]$Value) {
+  return "'" + $Value.Replace("'","''") + "'"
+}
+
+$installerUrl = "https://raw.githubusercontent.com/thebrazenbeard/executor/$SourceRef/scripts/Install-ExecutorDevice.ps1"
+$bootstrapPath = '$env:TEMP\Install-ExecutorDevice.ps1'
+$command = "Invoke-WebRequest -UseBasicParsing -Uri " + (Quote-PowerShell $installerUrl) +
+  " -OutFile " + $bootstrapPath +
+  "; & " + $bootstrapPath +
+  " -ServiceUrl " + (Quote-PowerShell $DeviceServiceUrl) +
+  " -DeviceId " + (Quote-PowerShell $DeviceId) +
+  " -DeviceToken " + (Quote-PowerShell $token) +
+  " -SourceRef " + (Quote-PowerShell $SourceRef)
+
+[pscustomobject]@{
+  device_id = $DeviceId
+  device_service_url = $DeviceServiceUrl
+  credential_file = $CredentialFile
+  bootstrap_command = $command
+  note = "The bootstrap command contains this device's credential. Treat it as a secret and use it only on the target laptop."
+} | ConvertTo-Json -Depth 4

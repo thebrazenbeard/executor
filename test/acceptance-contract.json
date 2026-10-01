@@ -99,6 +99,21 @@
       "id": "EXE-18",
       "requirement": "The pinned Desktop Commander payload preserves ordinary workstation environment context but does not inherit Executor/tunnel credentials or loader-injection variables; Windows real-payload qualification verifies an EXECUTOR_* sentinel cannot reach a start_process child.",
       "automated": true
+    },
+    {
+      "id": "EXE-19",
+      "requirement": "Remote workstation attachment uses a separate device-ingress listener that does not expose /mcp; the private MCP listener no longer accepts /device WebSocket attachment.",
+      "automated": true
+    },
+    {
+      "id": "EXE-20",
+      "requirement": "The headless Windows control-plane runtime starts Executor plus tunnel-client with zero connected devices and without requiring a local workstation ID, Desktop Commander install root, or trusted payload manifest.",
+      "automated": true
+    },
+    {
+      "id": "EXE-21",
+      "requirement": "Windows device enrollment generates a per-device credential, updates a reloadable server-side credential file without control-plane restart, installs the qualified agent/payload, protects the laptop credential with DPAPI, and never requires tunnel credentials on the laptop.",
+      "automated": true
     }
   ]
 }
