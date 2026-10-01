@@ -51,10 +51,10 @@ The authorization decision is whether Executor may operate the workstation at al
 
 ## Concurrency model
 
-Executor keeps upstream request concurrency separate from workstation-effect concurrency.
+Executor keeps parallel logic-lane concurrency separate from workstation-effect concurrency.
 
-- **Execution lanes:** configurable per-device concurrency for workstation effects. The inherited baseline/default is 8.
-- **Upstream contexts:** configurable concurrent request/admission contexts. The inherited baseline/default is 64.
+- **Parallel execution lanes:** configurable per-device concurrency for workstation effects. The inherited baseline/default is 8.
+- **Parallel logic lanes:** configurable concurrent request/admission contexts. The inherited baseline/default is 64.
 - **No authority multiplication:** increasing concurrency does not create additional permissions.
 - **Resource serialization:** operations that target the same protected resource may be serialized without changing their semantic authority.
 
