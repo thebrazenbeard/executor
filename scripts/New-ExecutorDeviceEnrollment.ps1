@@ -114,7 +114,7 @@ $command = "Invoke-WebRequest -UseBasicParsing -Uri " + (Quote-PowerShell $insta
   credential_file = $CredentialFile
   source_ref = $SourceRef
   tls_server_name = if ([string]::IsNullOrWhiteSpace($TlsServerName)) { $null } else { $TlsServerName }
-  bootstrap_command = $command
+  bootstrap_command = if ($InstallLocal) { $null } else { $command }
   local_install = if ($InstallLocal) { $localInstallResult.Trim() } else { $null }
   note = if ($InstallLocal) { "Device installed locally without placing its credential in shell history." } else { "The bootstrap command contains this device's credential. Treat it as a secret and use it only on the target laptop." }
 } | ConvertTo-Json -Depth 4
