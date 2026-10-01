@@ -8,9 +8,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/thebrazenbeard/executor/nodes/synology/internal/admin"
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/bridge"
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/config"
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/node"
+	"github.com/thebrazenbeard/executor/nodes/synology/internal/storage"
 )
 
 const version = "0.1.0"
@@ -38,6 +40,14 @@ func run(configPath string) error {
 	if err != nil {
 		return err
 	}
+	rootConfigs:=make([]storage.RootConfig,0,len(cfg.Roots))
+	for _,root:=range cfg.Roots {
+		rootConfigs=append(rootConfigs,storage.RootConfig{ID:root.ID,Path:root.Path,Mode:root.Mode})
+	}
+	storageManager,err:=storage.NewManager(rootConfigs)
+	if err!=nil { return err }
+	defer storageManager.Close()
+
 	client, err := bridge.NewClient(bridge.ClientConfig{
 		ServiceURL: cfg.ExecutorURL,
 		DeviceID: cfg.DeviceID,
@@ -49,5 +59,6 @@ func run(configPath string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return client.Run(ctx, node.NewHandler(version))
+	handler:=node.NewHandler(version,node.WithStorage(storageManager),node.WithAdmin(admin.NewReader("/")))
+	return client.Run(ctx,handler)
 }
