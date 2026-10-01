@@ -123,3 +123,17 @@ test("direct runtime validates an existing router mapping before treating it as 
   assert.match(start, /Description/i);
   assert.match(start, /mapping conflict/i);
 });
+
+test("Windows device reinstall terminates the prior installed device process tree before replacing payload", async () => {
+  const install = await readFile("scripts/Install-ExecutorDevice.ps1", "utf8");
+
+  assert.match(install, /function\s+Stop-ExistingInstalledDeviceProcesses/i);
+  assert.match(install, /Get-CimInstance\s+Win32_Process/i);
+  assert.match(install, /Stop-Process\s+-Id/i);
+
+  const definition = install.indexOf("function Stop-ExistingInstalledDeviceProcesses");
+  const cleanupCall = install.indexOf("Stop-ExistingInstalledDeviceProcesses", definition + 1);
+  const payloadInstall = install.indexOf("Install-ExecutorDesktopCommander.ps1");
+  assert.ok(cleanupCall > definition, "installer must invoke the installed-device cleanup helper");
+  assert.ok(cleanupCall < payloadInstall, "old installed-device processes must be stopped before payload replacement");
+});
