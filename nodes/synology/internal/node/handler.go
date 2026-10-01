@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/thebrazenbeard/executor/nodes/synology/internal/admin"
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/protocol"
 	"github.com/thebrazenbeard/executor/nodes/synology/internal/storage"
 )
@@ -21,9 +22,14 @@ func WithStorage(manager *storage.Manager) Option {
 	return func(h *Handler) { h.storage = manager }
 }
 
+func WithAdmin(reader *admin.Reader) Option {
+	return func(h *Handler) { h.admin = reader }
+}
+
 type Handler struct {
 	version string
 	storage *storage.Manager
+	admin   *admin.Reader
 }
 
 func NewHandler(version string, options ...Option) *Handler {
@@ -85,6 +91,9 @@ func (h *Handler) Handle(_ context.Context, request protocol.JSONRPC) (DispatchR
 		}
 		if strings.HasPrefix(params.Name, "storage.") && h.storage != nil {
 			return h.callStorageTool(request.ID, params.Name, params.Arguments), nil
+		}
+		if strings.HasPrefix(params.Name, "admin.") && h.admin != nil {
+			return h.callAdminTool(request.ID, params.Name, params.Arguments), nil
 		}
 		return rpcError(request.ID, -32601, "unknown tool: "+params.Name), nil
 	default:
