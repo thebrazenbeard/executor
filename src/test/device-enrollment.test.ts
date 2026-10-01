@@ -42,5 +42,8 @@ test("Windows laptop installer protects only the device credential locally and s
   assert.match(start, /Start-Process/);
   assert.match(start, /RedirectStandardOutput/);
   assert.match(start, /RedirectStandardError/);
+  assert.match(start, /System\.Threading\.Mutex/i);
+  assert.match(start, /WaitOne\s*\(\s*0/i);
+  assert.match(start, /ReleaseMutex/i);
   assert.equal(/&\s*\$node\s+\$agent\s+\*>>/i.test(start), false);
 });
