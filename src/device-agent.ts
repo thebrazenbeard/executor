@@ -50,6 +50,7 @@ if (await sha256(nodeExe) !== manifest.node_sha256.toLowerCase()) throw new Erro
 if (await sha256(entrypoint) !== manifest.entrypoint_sha256.toLowerCase()) throw new Error("Desktop Commander entrypoint hash mismatch");
 if (!manifest.mcp_args.length || path.normalize(manifest.mcp_args[0]) !== path.normalize(manifest.entrypoint_relative)) throw new Error("manifest mcp_args do not bind the qualified entrypoint");
 
+console.error(JSON.stringify({ status: "qualified-payload-spawn-start" }));
 const child = spawn(nodeExe, manifest.mcp_args, {
   cwd: installRoot,
   stdio: ["pipe", "pipe", "inherit"],
@@ -149,6 +150,7 @@ if (!initResponse.result || typeof initResponse.result !== "object" || Array.isA
   throw new Error("Desktop Commander initialize returned invalid result");
 }
 const downstreamInitializeResult = initResponse.result as Record<string, unknown>;
+console.error(JSON.stringify({ status: "qualified-payload-initialized" }));
 await notifyChild({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
 
 function connect() {
@@ -160,6 +162,7 @@ function connect() {
   const tlsHostHeader = tlsServerName
     ? tlsServerName + (tlsPort && tlsPort !== "443" ? `:${tlsPort}` : "")
     : "";
+  console.error(JSON.stringify({ status: "device-websocket-connect-attempt", transport: url.protocol }));
   const socket = new WebSocket(url, {
     maxPayload: 2_000_000,
     ...(deviceCa ? { ca: deviceCa } : {}),
