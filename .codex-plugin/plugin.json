@@ -1,7 +1,7 @@
 {
   "interface": {
     "displayName": "Executor",
-    "shortDescription": "Executor-powered workstation control",
+    "shortDescription": "Self-hosted full workstation control",
     "longDescription": "Connects ChatGPT and Codex to the Executor remote MCP service and its Executor-pinned Desktop Commander workstation payload.",
     "developerName": "Patrick A. Sims",
     "category": "Productivity",
@@ -19,7 +19,7 @@
   },
   "name": "executor",
   "version": "0.1.2",
-  "description": "Operate authorized workstations through Executor and a Executor-pinned Desktop Commander payload.",
+  "description": "Operate authorized workstations through Executor and an Executor-pinned Desktop Commander payload.",
   "author": {
     "name": "Patrick A. Sims"
   },
