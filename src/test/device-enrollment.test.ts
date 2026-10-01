@@ -39,4 +39,8 @@ test("Windows laptop installer protects only the device credential locally and s
   assert.match(start, /EXECUTOR_DEVICE_TOKEN/);
   assert.match(start, /EXECUTOR_TRUSTED_MANIFEST_SHA256/);
   assert.match(start, /dist[\\/]device-agent\.js/);
+  assert.match(start, /Start-Process/);
+  assert.match(start, /RedirectStandardOutput/);
+  assert.match(start, /RedirectStandardError/);
+  assert.equal(/&\s*\$node\s+\$agent\s+\*>>/i.test(start), false);
 });
