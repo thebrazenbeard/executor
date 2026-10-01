@@ -9,7 +9,7 @@ Executor is full-authority workstation execution.
 
 - Do not substitute a bounded process model.
 - Preserve full Desktop Commander file, search, process, terminal, session, configuration, and document semantics.
-- Treat **8 parallel execution lanes per device** and **64 parallel logic lanes** as the default concurrency profile.
+- Treat **8 parallel execution lanes for Windows workstation devices**, **2 parallel execution lanes for the DS216 `synology-storage` profile**, and **64 parallel logic lanes** as the qualified defaults.
 - Preserve explicit workstation identity and connection generation for effects.
 - Treat post-dispatch timeout or disconnect as outcome unknown until reconciled.
 - Never silently replay an ambiguous mutation.

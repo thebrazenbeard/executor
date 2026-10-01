@@ -8,6 +8,14 @@ Executor preserves full Desktop Commander semantics, including arbitrary command
 
 The remote layer therefore depends on strong authentication, explicit device association, encrypted transport, connection-generation fencing, and exact routing. `EXECUTOR_DEVICE_TOKENS_JSON` can bind distinct credentials to specific device IDs; when an ID is mapped, the shared device token cannot impersonate it.
 
+## Synology storage and DSM mutation boundary
+
+A `synology-storage` node has full file-content authority only inside roots that DSM grants to the ExecutorNode package user. Rooted descriptor-relative operations reject traversal and symlink escape; the package is configured with `run-as: package`, not root.
+
+Supported DSM state may be read for inspection. For a DSM mutation, **prepare** returns an immutable current/proposed-state record; **explicit user approval** is required before **apply**. The change ID is single-use, expires, is bound to the current device generation and normalized parameters, and is rejected if current state drifts before apply. ExecutorNode does not expose a generic root shell or arbitrary DSM database write.
+
+Automated CI can prove proposal/currentness logic, restart handoff behavior, package layout, and ARMv7 payload properties. It cannot prove a physical DS216 accepted or ran the SPK; physical NAS installation and repeated restart evidence remain a separate qualification class.
+
 ## No false deployment claims
 
 Repository source and CI do not prove that a tunnel is active, a workstation is connected, an AI client is authorized, or an external effect occurred.
