@@ -18,7 +18,7 @@
     ]
   },
   "name": "executor",
-  "version": "0.1.2",
+  "version": "0.1.0",
   "description": "Operate authorized workstations through Executor and an Executor-pinned Desktop Commander payload.",
   "author": {
     "name": "Patrick A. Sims"
