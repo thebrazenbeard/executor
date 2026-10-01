@@ -7,7 +7,11 @@ Target device: Synology DS216, DSM 7.2.x+, package architecture `armada38x`
 
 ## Intent
 
-Add a first-class Synology NAS device profile to Executor so a DS216 can connect to the same Executor control plane as Windows workstation devices while exposing a NAS-native tool surface.
+Add a first-class Synology NAS device profile to Executor whose primary and strict purpose is to give an authorized ChatGPT/Executor session direct read/write access to storage on the DiskStation where the SPK is installed.
+
+The node is a storage endpoint first. Its administrative authority exists only to support storage visibility, node health, and node self-management. It is not intended to become a general DSM administration product.
+
+A DS216 connects to the same Executor control plane as Windows workstation devices while exposing a NAS-native storage tool surface.
 
 The Synology node is not Desktop Commander transplanted onto DSM. It is a small native agent built for ARMv7/512 MB hardware that speaks Executor's existing `/device` protocol directly.
 
@@ -187,12 +191,10 @@ V1 admin authority is deliberately enumerated. It is not a generic shell.
 
 Read-only tools:
 
-- `admin.system_info`: kernel, DSM version, hostname, uptime, load, memory
-- `admin.storage_info`: mounted volumes, filesystem type, capacity/usage
-- `admin.network_info`: interface names, addresses, link state when readable
-- `admin.process_summary`: aggregate process/resource information available to the package account
-- `admin.package_status`: readable package inventory/status when available without privilege escalation
-- `admin.executor_status`: node version, connection state, configured roots, last reconnect/error
+- `admin.system_info`: DSM/kernel identity, hostname, uptime, load, and memory only as needed to diagnose node health
+- `admin.storage_info`: mounted storage volumes, filesystem type, capacity, and usage
+- `admin.network_info`: interface/address/link state only as needed to diagnose connectivity
+- `admin.executor_status`: node version, connection state, configured roots, root access state, last reconnect/error
 
 Mutating admin tools:
 
@@ -201,7 +203,7 @@ Mutating admin tools:
 
 `admin.executor_restart` is a package-user self-reexec: the running node starts the same verified executable/configuration as the same package identity, confirms child startup, then exits. It does not call `sudo`, `synopkg`, or a root helper.
 
-No other DSM administrative mutation is in V1.
+No other DSM administrative mutation is in V1. In particular, V1 does not expose general package inventory/control, process management, DSM configuration mutation, or arbitrary system-management APIs unrelated to storage access or ExecutorNode health.
 
 Explicit V1 exclusions:
 
@@ -404,7 +406,7 @@ A physical DS216 installation remains a separate evidence class. CI success does
 
 ## Acceptance boundary
 
-V1 is acceptable for implementation when:
+V1 is acceptable for implementation when the node remains a storage-access appliance for ChatGPT/Executor rather than a general DSM control surface, and:
 
 - existing Windows Executor behavior remains backward compatible;
 - the control plane can describe and route a `synology-storage` device;
@@ -414,6 +416,7 @@ V1 is acceptable for implementation when:
 - storage operations cannot escape granted roots through traversal or symlinks;
 - all configured writable roots can be fully read/written/deleted by tools according to filesystem permission;
 - admin mutation is limited to ExecutorNode self-management;
+- read-only admin data is limited to storage visibility, connection diagnostics, and ExecutorNode health;
 - secrets are absent from logs/build artifacts/status responses;
 - CI does not claim physical-NAS installation evidence.
 
