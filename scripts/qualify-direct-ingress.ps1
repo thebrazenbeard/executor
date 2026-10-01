@@ -41,6 +41,7 @@ try {
   @"
 {
   admin off
+  skip_install_trust
   auto_https disable_redirects
 }
 https://127.0.0.1:19443 {
