@@ -40,8 +40,8 @@ function rpcError(id: JsonRpc["id"], code: number, message: string): JsonRpc {
   return { jsonrpc: "2.0", id: id ?? null, error: { code, message } };
 }
 
-function localInitializeResponse(payload: JsonRpc, device: DeviceConnection): JsonRpc {
-  const downstream = device.initializeResult;
+function localInitializeResponse(payload: JsonRpc, device?: DeviceConnection): JsonRpc {
+  const downstream = device?.initializeResult ?? {};
   const requested = payload.params && typeof payload.params === "object" && !Array.isArray(payload.params)
     ? (payload.params as Record<string, unknown>).protocolVersion
     : undefined;
@@ -106,6 +106,26 @@ const server = http.createServer(async (req, res) => {
   catch { return json(res, 400, { error: "invalid json" }); }
   if (!isJsonRpc(payload)) return json(res, 400, { error: "invalid json-rpc" });
 
+  const requested = req.headers["x-executor-device"];
+  const headerDeviceId = Array.isArray(requested) ? requested[0] : requested;
+  if (headerDeviceId && (headerDeviceId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(headerDeviceId))) {
+    return json(res, 400, rpcError(payload.id, -32602, "invalid workstation id"));
+  }
+
+  if (payload.method === "initialize" && payload.id !== undefined) {
+    const initializeDeviceId = headerDeviceId
+      || (defaultDevice && registry.get(defaultDevice) ? defaultDevice : undefined)
+      || registry.list()[0];
+    return json(res, 200, localInitializeResponse(payload, initializeDeviceId ? registry.get(initializeDeviceId) : undefined));
+  }
+  if (payload.method === "notifications/initialized" && payload.id === undefined) {
+    res.writeHead(202, { "cache-control": "no-store" });
+    return res.end();
+  }
+  if (payload.method === "ping" && payload.id !== undefined) {
+    return json(res, 200, { jsonrpc: "2.0", id: payload.id ?? null, result: {} });
+  }
+
   const toolName = payload.method === "tools/call"
     && payload.params
     && typeof payload.params === "object"
@@ -134,26 +154,26 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  const requested = req.headers["x-executor-device"];
+  if (payload.method === "tools/list" && payload.id !== undefined && registry.list().length === 0) {
+    return json(res, 200, augmentToolsList({
+      jsonrpc: "2.0",
+      id: payload.id ?? null,
+      result: { tools: [] }
+    }));
+  }
+
   const routedDeviceId = extractDeviceId(payload);
-  const deviceId = routedDeviceId || (Array.isArray(requested) ? requested[0] : requested) || defaultDevice || registry.list()[0];
+  const deviceId = routedDeviceId
+    || headerDeviceId
+    || (defaultDevice && registry.get(defaultDevice) ? defaultDevice : undefined)
+    || registry.list()[0]
+    || defaultDevice;
   if (deviceId && (deviceId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(deviceId))) return json(res, 400, rpcError(payload.id, -32602, "invalid workstation id"));
   if (!deviceId) return json(res, 503, rpcError(payload.id, -32001, "no workstation connected"));
   const resolved = registry.resolve(deviceId);
   if (!resolved) return json(res, 404, rpcError(payload.id, -32002, "requested workstation is not connected"));
   const { device, generation } = resolved;
   const downstreamPayload = stripDeviceId(payload);
-
-  if (payload.method === "initialize" && payload.id !== undefined) {
-    return json(res, 200, localInitializeResponse(payload, device));
-  }
-  if (payload.method === "notifications/initialized" && payload.id === undefined) {
-    res.writeHead(202, { "cache-control": "no-store" });
-    return res.end();
-  }
-  if (payload.method === "ping" && payload.id !== undefined) {
-    return json(res, 200, { jsonrpc: "2.0", id: payload.id ?? null, result: {} });
-  }
 
   try {
     const parentHeader = req.headers["x-executor-parent-execution"];
