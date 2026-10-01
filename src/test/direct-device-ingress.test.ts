@@ -5,7 +5,10 @@ import { readFile } from "node:fs/promises";
 test("device agent supports an operator-owned CA for direct WSS", async () => {
   const agent = await readFile("src/device-agent.ts", "utf8");
   assert.match(agent, /EXECUTOR_DEVICE_CA_FILE/);
+  assert.match(agent, /EXECUTOR_DEVICE_TLS_SERVER_NAME/);
   assert.match(agent, /WebSocket[\s\S]*ca\s*:/);
+  assert.match(agent, /servername/);
+  assert.match(agent, /headers[\s\S]*Host/);
 });
 
 test("Caddy bootstrap uses official GitHub release assets and SHA-512 verification", async () => {
@@ -26,6 +29,8 @@ test("direct runtime has no traffic relay and fronts only device ingress", async
 
   assert.match(start, /Start-ExecutorControlPlane\.ps1/);
   assert.match(start, /Install-ExecutorCaddy\.ps1/);
+  assert.match(start, /TlsServerName/i);
+  assert.match(start, /executor-device\.invalid/i);
   assert.match(start, /tls\s+internal/i);
   assert.match(start, /skip_install_trust/i);
   assert.match(start, /reverse_proxy\s+127\.0\.0\.1:/i);
@@ -61,7 +66,11 @@ test("enrollment carries a public CA without changing device-token storage", asy
   assert.match(install, /CaCertificateBase64/);
   assert.match(install, /device-ca\.crt/);
   assert.match(install, /ca_path/);
+  assert.match(enroll, /TlsServerName/);
+  assert.match(install, /TlsServerName/);
+  assert.match(install, /tls_server_name/);
   assert.match(launch, /EXECUTOR_DEVICE_CA_FILE/);
+  assert.match(launch, /EXECUTOR_DEVICE_TLS_SERVER_NAME/);
   assert.match(install, /device-token\.dpapi/);
 });
 
@@ -82,6 +91,8 @@ test("Windows CI exercises a real Caddy TLS + WSS device route", async () => {
   assert.match(qualifier, /Install-ExecutorCaddy\.ps1/);
   assert.match(qualifier, /tls\s+internal/i);
   assert.match(probe, /new WebSocket/);
+  assert.match(probe, /servername/);
+  assert.match(probe, /Host/);
   assert.match(probe, /deviceHello/);
 });
 
