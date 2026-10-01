@@ -9,7 +9,7 @@ Target device: Synology DS216, DSM 7.2.x+, package architecture `armada38x`
 
 Add a first-class Synology NAS device profile to Executor whose primary and strict purpose is to give an authorized ChatGPT/Executor session direct read/write access to storage on the DiskStation where the SPK is installed.
 
-The node is a storage endpoint first. Its administrative authority exists only to support storage visibility, node health, and node self-management. It is not intended to become a general DSM administration product.
+The node is a storage endpoint first, but it may expose broad read access to DSM state and configuration for diagnosis, inspection, and management planning. DSM mutations are allowed only through an explicit user-verification gate. The node is not an unrestricted root shell or an unreviewed general-purpose DSM mutation surface.
 
 A DS216 connects to the same Executor control plane as Windows workstation devices while exposing a NAS-native storage tool surface.
 
@@ -185,25 +185,70 @@ The storage implementation SHALL:
 
 A symlink may be reported by `storage.stat`, but V1 does not follow it for read/write/copy/move/delete traversal.
 
-## Limited administration authority
+## DSM administration authority
 
-V1 admin authority is deliberately enumerated. It is not a generic shell.
+The node may expose broad read-only DSM visibility, including configuration and operational state that the package account or a DSM-supported API can legitimately read. Read access is not confirmation-gated because it does not change the NAS.
 
-Read-only tools:
+Representative read tools may include:
 
-- `admin.system_info`: DSM/kernel identity, hostname, uptime, load, and memory only as needed to diagnose node health
-- `admin.storage_info`: mounted storage volumes, filesystem type, capacity, and usage
-- `admin.network_info`: interface/address/link state only as needed to diagnose connectivity
-- `admin.executor_status`: node version, connection state, configured roots, root access state, last reconnect/error
+- `admin.system_info`
+- `admin.storage_info`
+- `admin.network_info`
+- `admin.package_status`
+- `admin.service_status`
+- `admin.user_group_info`
+- `admin.shared_folder_info`
+- `admin.security_info`
+- `admin.update_info`
+- `admin.executor_status`
 
-Mutating admin tools:
+V1 does not expose an unrestricted shell as the DSM administration interface.
 
-- `admin.executor_reconnect`
-- `admin.executor_restart`
+### Verified DSM mutations
 
-`admin.executor_restart` is a package-user self-reexec: the running node starts the same verified executable/configuration as the same package identity, confirms child startup, then exits. It does not call `sudo`, `synopkg`, or a root helper.
+Any operation that alters DSM state MUST use a two-phase verified-change flow:
 
-No other DSM administrative mutation is in V1. In particular, V1 does not expose general package inventory/control, process management, DSM configuration mutation, or arbitrary system-management APIs unrelated to storage access or ExecutorNode health.
+1. **Prepare** — ExecutorNode resolves the requested change, reads the current state, validates prerequisites, and returns an immutable proposal containing:
+   - the exact target;
+   - current value/state;
+   - proposed value/state;
+   - expected side effects;
+   - rollback/recovery information when available;
+   - a one-time `changeId`;
+   - an expiration timestamp.
+2. **User verification** — ChatGPT presents that exact proposal to the user and asks for explicit approval.
+3. **Apply** — only after explicit approval, ChatGPT may submit `changeId` to the apply tool.
+4. **Currentness check** — before mutation, ExecutorNode re-reads the target. If current state no longer matches the prepared proposal, the change expires and MUST be prepared again.
+5. **Readback verification** — after mutation, ExecutorNode reads the resulting state and returns the observed result.
+
+A prepared proposal is single-use, short-lived, bound to the exact node/device generation and exact normalized mutation parameters, and cannot be broadened during apply.
+
+Examples of confirmation-gated DSM mutations may include:
+
+- package/service start, stop, restart, enable, or disable;
+- selected DSM configuration changes;
+- shared-folder settings;
+- user/group configuration;
+- network settings;
+- security settings;
+- update settings;
+- reboot/shutdown;
+- ExecutorNode self-management.
+
+Not every DSM setting is automatically supported merely because it exists. Each mutating capability must have an explicit adapter that knows how to read current state, prepare an exact change, apply it through a DSM-supported mechanism, and verify the result.
+
+### Explicit exclusions
+
+Even with user verification, V1 SHALL NOT provide:
+
+- arbitrary root shell execution;
+- arbitrary command execution as root;
+- arbitrary file writes outside granted storage roots merely by naming a DSM path;
+- raw block-device writes;
+- direct undocumented DSM database mutation;
+- bypass of Synology privilege/resource mechanisms.
+
+These exclusions define how DSM administration is mediated; they do not reduce the full read/write storage authority inside granted storage roots.
 
 Explicit V1 exclusions:
 
@@ -400,9 +445,15 @@ A physical DS216 installation remains a separate evidence class. CI success does
 >
 > **Resolution:** add device-advertised execution capacity and use 2 lanes for DS216 V1 while retaining 64 control-plane logic lanes and 8-lane Windows devices.
 
-> **Challenge: "limited admin" can quietly expand until it becomes arbitrary root execution.**
+> **Challenge: allowing DSM changes after user confirmation could become a rubber-stamp path to root-equivalent administration.**
 >
-> **Resolution:** V1 has an explicit admin-tool allowlist and explicit exclusions. Any future privileged DSM mutation is a separate architectural change and must identify the DSM-supported privilege/resource mechanism it relies on.
+> A generic `admin.apply(command)` plus a confirmation prompt would not provide a meaningful boundary; it would simply move arbitrary administration behind one click.
+>
+> **Resolution:** there is no generic mutation command. Each supported DSM mutation has a typed adapter and a two-phase prepare/apply contract. The prepared change is immutable, one-time, short-lived, bound to current device generation and current target state, and must be re-prepared if state drifts. The user approves the exact diff, not a broad category of authority.
+>
+> **Challenge: ChatGPT could theoretically call the apply tool without meaningfully surfacing the proposal.**
+>
+> **Resolution:** the protocol and node enforce two-phase currentness and parameter binding, while the Executor skill/plugin contract SHALL require explicit user approval before apply. This is strong protection against stale/broadened mutations, but it is not a cryptographic proof of human attention. If later required, V2 may add a DSM-local approval challenge or second-factor confirmation without changing the storage architecture.
 
 ## Acceptance boundary
 
@@ -415,8 +466,10 @@ V1 is acceptable for implementation when the node remains a storage-access appli
 - package privilege defaults to `run-as: package`;
 - storage operations cannot escape granted roots through traversal or symlinks;
 - all configured writable roots can be fully read/written/deleted by tools according to filesystem permission;
-- admin mutation is limited to ExecutorNode self-management;
-- read-only admin data is limited to storage visibility, connection diagnostics, and ExecutorNode health;
+- broad DSM state/configuration may be read where supported;
+- every DSM mutation is prepare -> explicit user verification -> apply -> readback;
+- prepared mutations are single-use, short-lived, generation-bound, parameter-bound, and invalidated by state drift;
+- no arbitrary root shell or undocumented DSM-database mutation exists;
 - secrets are absent from logs/build artifacts/status responses;
 - CI does not claim physical-NAS installation evidence.
 
