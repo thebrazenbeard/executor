@@ -112,3 +112,24 @@ The V1 branch is qualified on Ubuntu and Windows. Windows qualification builds t
 See [docs/SETUP.md](docs/SETUP.md) for the self-hosted tunnel and workstation setup.
 
 Repository qualification does not prove that a particular private tunnel or workstation is currently online. Runtime activation remains separate evidence.
+
+
+## Zero-cost quickstart
+
+For development and real-device testing without buying a domain or paid hosting, Executor can publish only its device-ingress listener through a temporary Cloudflare Quick Tunnel. The OpenAI Secure MCP Tunnel still carries ChatGPT MCP traffic independently.
+
+```powershell
+.\scripts\Start-ExecutorZeroCost.ps1 `
+  -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt" `
+  -DeviceId "test-laptop"
+```
+
+The quickstart starts the headless control plane, obtains a locally installed and Authenticode-verified `cloudflared`, creates a temporary `https://*.trycloudflare.com` device endpoint, verifies its public `/health`, and optionally emits the laptop enrollment command.
+
+This path has no paid fallback and requires no purchased domain. Cloudflare Quick Tunnels are a testing/development service: the hostname changes after restart and there is no uptime guarantee. If the endpoint changes, an already-installed Windows device can be repointed without reinstalling:
+
+```powershell
+.\scripts\Set-ExecutorInstalledDeviceEndpoint.ps1 -ServiceUrl "https://new-host.trycloudflare.com"
+```
+
+New laptop enrollment prefers the exact local Executor Git commit as its source ref, so the generated bootstrap is pinned to the version that produced it unless the operator explicitly supplies `-SourceRef`.

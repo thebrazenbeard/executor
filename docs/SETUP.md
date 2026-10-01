@@ -120,3 +120,43 @@ The qualifier sends 64 concurrent `start_process` calls through `EXECUTOR_REMOTE
 ## Evidence boundary
 
 Repository CI proves source/build behavior and real-payload 8/64 concurrency on its qualification runner. It does not prove that a personal tunnel is currently active or that a specific workstation is currently connected.
+
+
+## Zero-cost remote-laptop quickstart
+
+The development/test quickstart keeps recurring infrastructure cost at $0 by using Cloudflare Quick Tunnels only for the separate Executor device-ingress listener.
+
+```powershell
+.\scripts\Start-ExecutorZeroCost.ps1 `
+  -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt"
+```
+
+To generate enrollment for a laptop in the same command:
+
+```powershell
+.\scripts\Start-ExecutorZeroCost.ps1 `
+  -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt" `
+  -DeviceId "shop-laptop"
+```
+
+The credential file is read at runtime and the OpenAI API secret is not written to Executor runtime state. If `EXECUTOR_CLIENT_TOKEN` is absent, the wrapper generates an ephemeral one for the control-plane/tunnel-client process pair.
+
+The wrapper downloads `cloudflared.exe` only from Cloudflare's official GitHub release path when no signed copy is available, then requires a valid Windows Authenticode signature identifying Cloudflare before execution.
+
+Lifecycle commands:
+
+```powershell
+.\scripts\Get-ExecutorZeroCostStatus.ps1
+.\scripts\Restart-ExecutorZeroCost.ps1 -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt"
+.\scripts\Stop-ExecutorZeroCost.ps1
+```
+
+A Quick Tunnel restart normally changes the public `trycloudflare.com` hostname. Repoint an already-installed Windows node with:
+
+```powershell
+.\scripts\Set-ExecutorInstalledDeviceEndpoint.ps1 -ServiceUrl "https://new-host.trycloudflare.com"
+```
+
+That command changes only the non-secret service URL and restarts the existing `Executor Device` scheduled task. It does not replace the device ID, device credential, agent, or Desktop Commander payload.
+
+This quickstart deliberately has no paid, domain-purchase, or metered-service fallback. A stable production hostname is a separate deployment choice.
