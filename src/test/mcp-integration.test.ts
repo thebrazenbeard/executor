@@ -144,3 +144,47 @@ test("Executor exposes RDC-style device routing while preserving downstream tool
     child.kill();
   }
 });
+
+
+test("Executor remains connectable when no workstation is online", { timeout: 20_000 }, async () => {
+  const port = 20787 + Math.floor(Math.random() * 1000);
+  const child = spawn(process.execPath, ["dist/server.js"], {
+    env: {
+      ...process.env,
+      PORT: String(port),
+      HOST: "127.0.0.1",
+      EXECUTOR_CLIENT_TOKEN: "offline-client-test",
+      EXECUTOR_DEVICE_TOKEN: "offline-device-test",
+      EXECUTOR_DEFAULT_DEVICE: ""
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("server start timeout")), 8000);
+    child.stdout.on("data", chunk => {
+      if (chunk.toString().includes('"status":"listening"')) {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+    child.once("exit", code => reject(new Error("server exited early: " + code)));
+  });
+
+  const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`), {
+    requestInit: { headers: { authorization: "Bearer offline-client-test" } }
+  });
+  const client = new Client({ name: "executor-offline-acceptance", version: "1.0.0" });
+
+  try {
+    await client.connect(transport);
+    const listed = await client.listTools();
+    assert.deepEqual(listed.tools.map(t => t.name), ["list_devices"]);
+
+    const devices = await client.callTool({ name: "list_devices", arguments: {} });
+    assert.deepEqual((devices.structuredContent as any).devices, []);
+  } finally {
+    await client.close().catch(() => {});
+    child.kill();
+  }
+});
