@@ -8,17 +8,18 @@ Set-StrictMode -Version Latest
 $StatePath = Join-Path $RuntimeRoot "runtime-state.json"
 
 function Stop-RecordedProcess([int]$ProcessId,[string]$CommandNeedle) {
-  if ($ProcessId -le 0) { return }
+  if ($ProcessId -le 0) { return $true }
   $record = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
-  if (-not $record) { return }
+  if (-not $record) { return $true }
 
   $commandLine = [string]$record.CommandLine
   if ($commandLine -notlike "*$CommandNeedle*") {
     Write-Warning "Refusing to stop PID $ProcessId because its CommandLine no longer matches $CommandNeedle"
-    return
+    return $false
   }
 
   Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+  return $true
 }
 
 if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
@@ -28,9 +29,15 @@ if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
 
 $state = Get-Content -Raw -Encoding UTF8 $StatePath | ConvertFrom-Json
 
-Stop-RecordedProcess ([int]$state.tunnel_pid) "tunnel-client"
-Stop-RecordedProcess ([int]$state.device_pid) "dist/device-agent.js"
-Stop-RecordedProcess ([int]$state.server_pid) "dist/server.js"
+$allSafe = $true
+if (-not (Stop-RecordedProcess ([int]$state.tunnel_pid) "tunnel-client")) { $allSafe = $false }
+if (-not (Stop-RecordedProcess ([int]$state.device_pid) "dist/device-agent.js")) { $allSafe = $false }
+if (-not (Stop-RecordedProcess ([int]$state.server_pid) "dist/server.js")) { $allSafe = $false }
+
+if (-not $allSafe) {
+  Write-Warning "Runtime state retained because at least one recorded PID no longer belongs to Executor."
+  throw "Executor stop aborted on PID identity mismatch"
+}
 
 Remove-Item -LiteralPath $StatePath -Force -ErrorAction SilentlyContinue
 Write-Host "EXECUTOR STOPPED"
