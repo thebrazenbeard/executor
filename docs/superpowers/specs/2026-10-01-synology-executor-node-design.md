@@ -73,6 +73,8 @@ executor/
         WIZARD_UIFILES/
           install_uifile
         LICENSE
+        PACKAGE_ICON.PNG
+        PACKAGE_ICON_256.PNG
       tests/
       build-spk.sh
       go.mod
@@ -95,7 +97,8 @@ Executor V1 currently treats every device as a generic downstream MCP endpoint. 
     "platform": "linux",
     "arch": "armv7",
     "packageArch": "armada38x",
-    "nodeVersion": "0.1.0"
+    "nodeVersion": "0.1.0",
+    "executionCapacity": 2
   },
   "initializeResult": { "...": "..." }
 }
@@ -156,7 +159,9 @@ V1 SHALL expose these logical tools:
 - `storage.space`
 - `storage.list_roots`
 
-Large reads/writes use bounded chunks/streaming. The default maximum response payload is constrained well below Executor's transport payload ceiling.
+Large reads/writes use bounded chunks/streaming. The default maximum response payload is constrained well below Executor's transport payload ceiling. Whole-file replacement uses a same-root temporary file followed by flush/sync and rename where the filesystem permits it; `storage.append` is the explicit non-atomic append operation.
+
+"Full R/W" refers to file/directory content operations. V1 does not expose `chmod`, `chown`, ACL editing, or DSM share-permission mutation because those cross into administrative authority.
 
 ### Path containment
 
@@ -193,6 +198,8 @@ Mutating admin tools:
 
 - `admin.executor_reconnect`
 - `admin.executor_restart`
+
+`admin.executor_restart` is a package-user self-reexec: the running node starts the same verified executable/configuration as the same package identity, confirms child startup, then exits. It does not call `sudo`, `synopkg`, or a root helper.
 
 No other DSM administrative mutation is in V1.
 
@@ -245,6 +252,8 @@ The installation wizard SHALL collect:
 - device ID, defaulting to the DSM hostname when possible;
 - device credential/token;
 - optional comma/newline-separated initial share roots.
+
+Installer-provided roots are configuration requests, not permission grants. At startup the node marks each root `writable`, `read-only`, or `unavailable` based on the package account's actual DSM permissions; denied roots are never silently promoted.
 
 Secrets SHALL be written to the package home/config area with package-user-only permissions and SHALL not be written to package logs or exported into arbitrary subprocess environments.
 
@@ -340,6 +349,7 @@ Required unit/integration coverage:
 - final-component symlink mutation rejection;
 - symlink-swap/TOCTOU adversarial cases where reproducible;
 - `@*` internal-directory rejection;
+- atomic replacement behavior and interrupted-write cleanup;
 - delete/copy/move cross-root semantics;
 - large-file chunking and memory ceiling;
 - reconnect behavior;
