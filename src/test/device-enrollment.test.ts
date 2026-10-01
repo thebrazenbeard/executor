@@ -20,6 +20,8 @@ test("Windows laptop installer protects only the device credential locally and s
   assert.match(install, /DeviceId/);
   assert.match(install, /DeviceToken/);
   assert.match(install, /Install-ExecutorDesktopCommander\.ps1/);
+  assert.match(install, /npm[\s\S]*install[\s\S]*--ignore-scripts/i);
+  assert.equal(/npm\s+ci\b/i.test(install), false);
   assert.match(install, /npm.*build|npm[\s\S]*run build/);
   assert.match(install, /ConvertFrom-SecureString/);
   assert.match(install, /Register-ScheduledTask|schtasks/i);
