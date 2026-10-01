@@ -10,7 +10,9 @@ test("device agent supports an operator-owned CA for direct WSS", async () => {
 
 test("Caddy bootstrap uses official GitHub release assets and SHA-512 verification", async () => {
   const installer = await readFile("scripts/Install-ExecutorCaddy.ps1", "utf8");
-  assert.match(installer, /api\.github\.com\/repos\/caddyserver\/caddy\/releases\/latest/i);
+  assert.equal(/api\.github\.com/i.test(installer), false);
+  assert.match(installer, /github\.com\/caddyserver\/caddy\/releases\/latest/i);
+  assert.match(installer, /url_effective|Location/i);
   assert.match(installer, /caddyserver\/caddy\/releases/i);
   assert.match(installer, /SHA512/i);
   assert.equal(/cloudflare|tailscale|ngrok/i.test(installer), false);
