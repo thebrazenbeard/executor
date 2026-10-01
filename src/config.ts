@@ -1,5 +1,5 @@
-export const QUALIFICATION_EXECUTION_FLOOR = 4;
-export const QUALIFICATION_UPSTREAM_CONTEXT_FLOOR = 32;
+export const QUALIFICATION_EXECUTION_FLOOR = 8;
+export const QUALIFICATION_UPSTREAM_CONTEXT_FLOOR = 64;
 
 function positiveInt(name: string, raw: string | undefined, fallback: number): number {
   if (raw === undefined || raw === "") return fallback;
