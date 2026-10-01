@@ -25,6 +25,7 @@ test("direct runtime has no traffic relay and fronts only device ingress", async
   assert.match(start, /Start-ExecutorControlPlane\.ps1/);
   assert.match(start, /Install-ExecutorCaddy\.ps1/);
   assert.match(start, /tls\s+internal/i);
+  assert.match(start, /skip_install_trust/i);
   assert.match(start, /reverse_proxy\s+127\.0\.0\.1:/i);
   assert.match(start, /New-NetFirewallRule/);
   assert.match(start, /HNetCfg\.NATUPnP/);
