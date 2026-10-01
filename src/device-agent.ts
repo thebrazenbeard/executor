@@ -185,7 +185,7 @@ function connect() {
   });
 
   socket.on("message", raw => {
-    let message: Partial<DeviceRequest> & { type?: string };
+    let message: { type?: string; requestId?: string; payload?: JsonRpc };
     try { message = JSON.parse(raw.toString()); } catch { socket.close(4002, "invalid json"); return; }
     if (message.type === "ready") {
       console.error(JSON.stringify({ status: "device-websocket-ready" }));
