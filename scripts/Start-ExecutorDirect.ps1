@@ -205,16 +205,11 @@ $siteAddresses {
   $rootCa = Join-Path $CaddyDataHome "caddy\pki\authorities\local\root.crt"
   Wait-Until { Test-Path -LiteralPath $rootCa -PathType Leaf } 30 "Caddy root CA was not provisioned"
 
-  $curl = (Get-Command curl.exe -ErrorAction Stop).Source
-  $resolve = ("{0}:{1}:127.0.0.1" -f $PublicHost,$PublicPort)
+  $node = (Get-Command node -ErrorAction Stop).Source
+  $probeScript = Join-Path $PSScriptRoot "probe-device-ingress.mjs"
   Wait-Until {
-    $body = & $curl --silent --show-error --fail --ssl-revoke-best-effort --cacert $rootCa --resolve $resolve ($publicUrl + "/health") 2>$null
-    if ($LASTEXITCODE -ne 0) { return $false }
-    try {
-      $health = $body | ConvertFrom-Json
-      return ($health.status -eq "ok" -and $health.role -eq "device-ingress")
-    }
-    catch { return $false }
+    & $node $probeScript --url $publicUrl --ca $rootCa --resolve-to-loopback *> $null
+    return ($LASTEXITCODE -eq 0)
   } 30 "direct TLS health probe did not become ready"
 
   [pscustomobject]@{
