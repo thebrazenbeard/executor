@@ -592,7 +592,7 @@ Fields: NAS model, DSM version, package version/hash, Executor server exact head
 
 - [ ] **Step 3: Verify no CI or README claim marks physical qualification complete**
 
-Search: `git grep -n "DS216.*PASS\|physically qualified\|installed successfully" -- . ':!nodes/synology/QUALIFICATION.md'`
+Search: `git grep -n -E 'DS216.*PASS|physically qualified|installed successfully' -- . ':(exclude)nodes/synology/QUALIFICATION.md' ':(exclude)docs/superpowers/plans/2026-10-01-synology-executor-node.md'`
 Expected: no unsupported completion claim.
 
 - [ ] **Step 4: Commit**

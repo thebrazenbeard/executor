@@ -82,7 +82,7 @@ Physical DS216 qualification repeats an approved restart three times and checks 
 
 A green CI artifact proves repository-controlled build, test, architecture, and package checks. It does not prove:
 
-- the SPK has installed successfully on a particular DS216;
+- successful physical installation of the SPK on a particular DS216;
 - the package user has permission to a particular share;
 - idle RSS is below the design target on physical hardware;
 - a live Executor control plane/device ingress is reachable; or
