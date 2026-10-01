@@ -42,7 +42,9 @@ test("control plane can bootstrap the official OpenAI tunnel-client when it is n
   const start = await readFile("scripts/Start-ExecutorControlPlane.ps1", "utf8");
   const workflow = await readFile(".github/workflows/ci.yml", "utf8");
 
-  assert.match(installer, /api\.github\.com\/repos\/openai\/tunnel-client\/releases\/latest/i);
+  assert.equal(/api\.github\.com/i.test(installer), false);
+  assert.match(installer, /github\.com\/openai\/tunnel-client\/releases\/latest/i);
+  assert.match(installer, /url_effective|Location/i);
   assert.match(installer, /SHA256SUMS\.txt/);
   assert.match(installer, /Get-FileHash[^\n]*SHA256|SHA256[\s\S]*Get-FileHash/i);
   assert.match(installer, /"X64"\s*\{\s*\$assetArch\s*=\s*"amd64"/i);
