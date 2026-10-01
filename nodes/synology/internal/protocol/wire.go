@@ -51,3 +51,21 @@ type JSONRPC struct {
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *RPCError       `json:"error,omitempty"`
 }
+
+
+type Tool struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	InputSchema map[string]any `json:"inputSchema"`
+}
+
+type Content struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
+type ToolResult struct {
+	Content           []Content      `json:"content,omitempty"`
+	StructuredContent map[string]any `json:"structuredContent,omitempty"`
+	IsError           bool           `json:"isError,omitempty"`
+}
