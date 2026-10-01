@@ -1,6 +1,7 @@
 package storage
 
-import "sync"
+import ("sync"
+"time")
 
 type RootConfig struct {
 	ID   string
@@ -39,3 +40,16 @@ func (h *ParentHandle) Close() error {
 	h.fd = -1
 	return err
 }
+
+
+const MaxTransferBytes = 512 * 1024
+
+type FileMeta struct {
+	Name    string    `json:"name"`
+	Kind    string    `json:"kind"`
+	Size    int64     `json:"size"`
+	Mode    uint32    `json:"mode"`
+	ModTime time.Time `json:"modTime"`
+}
+
+type Entry = FileMeta
