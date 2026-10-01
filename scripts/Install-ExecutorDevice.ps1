@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory=$true)][string]$ServiceUrl,
   [Parameter(Mandatory=$true)][string]$DeviceId,
   [Parameter(Mandatory=$true)][string]$DeviceToken,
+  [string]$CaCertificateBase64 = "",
   [string]$SourceRepository = "https://github.com/thebrazenbeard/executor.git",
   [string]$SourceRef = "build/executor-v1",
   [string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Executor"),
@@ -44,6 +45,7 @@ $staging = Join-Path $RuntimeRoot ("Agent.staging." + [Guid]::NewGuid().ToString
 $backup = $null
 $configPath = Join-Path $RuntimeRoot "device.json"
 $credentialPath = Join-Path $RuntimeRoot "device-token.dpapi"
+$caPath = Join-Path $RuntimeRoot "device-ca.crt"
 
 $existingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($existingTask) {
@@ -89,6 +91,11 @@ try {
     $backup = $null
   }
 
+  if (-not [string]::IsNullOrWhiteSpace($CaCertificateBase64)) {
+    try { [IO.File]::WriteAllBytes($caPath, [Convert]::FromBase64String($CaCertificateBase64)) }
+    catch { throw "CaCertificateBase64 is not valid base64" }
+  }
+
   $secureToken = ConvertTo-SecureString -String $DeviceToken -AsPlainText -Force
   $secureToken | ConvertFrom-SecureString | Set-Content -LiteralPath $credentialPath -Encoding ASCII
 
@@ -101,6 +108,7 @@ try {
     manifest_sha256 = $manifestHash
     source_commit = $sourceCommit
     task_name = $TaskName
+    ca_path = if (Test-Path -LiteralPath $caPath -PathType Leaf) { $caPath } else { $null }
   } | ConvertTo-Json -Depth 4
   $configJson | Set-Content -LiteralPath $configPath -Encoding UTF8
 

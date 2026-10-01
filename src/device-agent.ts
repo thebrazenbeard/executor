@@ -11,12 +11,14 @@ const serviceUrl = process.env.EXECUTOR_SERVICE_URL ?? "";
 const token = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
 const deviceId = process.env.EXECUTOR_DEVICE_ID ?? "";
 const trustedManifestHash = process.env.EXECUTOR_TRUSTED_MANIFEST_SHA256 ?? "";
+const deviceCaFile = process.env.EXECUTOR_DEVICE_CA_FILE?.trim() ?? "";
 const installRoot = process.env.EXECUTOR_INSTALL_ROOT ?? (process.platform === "win32"
   ? "C:\\ProgramData\\Executor\\DesktopCommanderMCP"
   : "/opt/executor/DesktopCommanderMCP");
 
 if (!serviceUrl || !token || !deviceId || !trustedManifestHash) throw new Error("EXECUTOR_SERVICE_URL, EXECUTOR_DEVICE_TOKEN, EXECUTOR_DEVICE_ID and EXECUTOR_TRUSTED_MANIFEST_SHA256 are required");
 
+const deviceCa = deviceCaFile ? await readFile(deviceCaFile) : undefined;
 const manifestPath = path.join(installRoot, "executor-desktop-commander.manifest.json");
 const rawManifest = await readFile(manifestPath, "utf8");
 const manifestText = rawManifest.charCodeAt(0) === 0xfeff ? rawManifest.slice(1) : rawManifest;
@@ -153,7 +155,7 @@ function connect() {
   assertSafeDeviceServiceUrl(url);
   url.pathname = "/device";
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, { maxPayload: 2_000_000 });
+  const socket = new WebSocket(url, { maxPayload: 2_000_000, ...(deviceCa ? { ca: deviceCa } : {}) });
   ws = socket;
 
   socket.on("open", () => {

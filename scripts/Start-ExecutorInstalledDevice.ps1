@@ -30,6 +30,9 @@ $env:EXECUTOR_DEVICE_ID = [string]$config.device_id
 $env:EXECUTOR_DEVICE_TOKEN = $token
 $env:EXECUTOR_INSTALL_ROOT = [string]$config.payload_root
 $env:EXECUTOR_TRUSTED_MANIFEST_SHA256 = [string]$config.manifest_sha256
+if ($config.PSObject.Properties.Name -contains "ca_path" -and -not [string]::IsNullOrWhiteSpace([string]$config.ca_path)) {
+  $env:EXECUTOR_DEVICE_CA_FILE = [string]$config.ca_path
+}
 
 $node = (Get-Command node -ErrorAction Stop).Source
 $agent = Join-Path ([string]$config.agent_root) "dist\device-agent.js"
@@ -42,5 +45,6 @@ try {
 }
 finally {
   $env:EXECUTOR_DEVICE_TOKEN = $null
+  $env:EXECUTOR_DEVICE_CA_FILE = $null
   $token = $null
 }

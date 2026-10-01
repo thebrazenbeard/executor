@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory=$true)][string]$DeviceId,
   [Parameter(Mandatory=$true)][string]$DeviceServiceUrl,
   [string]$CredentialFile = "",
+  [string]$CaCertificatePath = "",
   [string]$SourceRef = ""
 )
 
@@ -78,6 +79,12 @@ finally {
   Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
 }
 
+$caCertificateBase64 = ""
+if (-not [string]::IsNullOrWhiteSpace($CaCertificatePath)) {
+  if (-not (Test-Path -LiteralPath $CaCertificatePath -PathType Leaf)) { throw "CA certificate not found: $CaCertificatePath" }
+  $caCertificateBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($CaCertificatePath))
+}
+
 function Quote-PowerShell([string]$Value) {
   return "'" + $Value.Replace("'","''") + "'"
 }
@@ -90,6 +97,7 @@ $command = "Invoke-WebRequest -UseBasicParsing -Uri " + (Quote-PowerShell $insta
   " -ServiceUrl " + (Quote-PowerShell $DeviceServiceUrl) +
   " -DeviceId " + (Quote-PowerShell $DeviceId) +
   " -DeviceToken " + (Quote-PowerShell $token) +
+  $(if ([string]::IsNullOrWhiteSpace($caCertificateBase64)) { "" } else { " -CaCertificateBase64 " + (Quote-PowerShell $caCertificateBase64) }) +
   " -SourceRef " + (Quote-PowerShell $SourceRef)
 
 [pscustomobject]@{
