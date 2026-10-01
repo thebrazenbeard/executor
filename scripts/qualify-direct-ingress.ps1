@@ -44,7 +44,7 @@ try {
   skip_install_trust
   auto_https disable_redirects
 }
-https://127.0.0.1:19443 {
+https://executor-device.invalid:19443 {
   tls internal
   reverse_proxy 127.0.0.1:18992
 }
@@ -58,6 +58,7 @@ https://127.0.0.1:19443 {
   $env:EXECUTOR_DIRECT_QUAL_URL = "https://127.0.0.1:19443"
   $env:EXECUTOR_DIRECT_QUAL_CA = $ca
   $env:EXECUTOR_DIRECT_QUAL_TOKEN = "direct-ci-device"
+  $env:EXECUTOR_DIRECT_QUAL_TLS_SERVER_NAME = "executor-device.invalid"
   node scripts/qualify-direct-ingress.mjs
   if ($LASTEXITCODE -ne 0) { throw "direct WSS qualification failed" }
 }
