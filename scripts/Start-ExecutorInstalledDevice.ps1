@@ -16,6 +16,22 @@ if (-not (Test-Path -LiteralPath $credentialPath -PathType Leaf)) { throw "Execu
 $config = Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom-Json
 if ($config.schema -ne "EXECUTOR_INSTALLED_DEVICE_V1") { throw "Unsupported Executor installed-device config schema" }
 
+$mutexMaterial = [Text.Encoding]::UTF8.GetBytes(([IO.Path]::GetFullPath($RuntimeRoot).ToLowerInvariant() + "|" + [string]$config.device_id))
+$sha = [Security.Cryptography.SHA256]::Create()
+try { $mutexHash = $sha.ComputeHash($mutexMaterial) }
+finally { $sha.Dispose() }
+$mutexSuffix = ([BitConverter]::ToString($mutexHash)).Replace("-","").Substring(0,32)
+$mutexName = "Local\ExecutorDevice-" + $mutexSuffix
+$mutex = New-Object -TypeName System.Threading.Mutex -ArgumentList $false,$mutexName
+$mutexAcquired = $false
+try {
+  try { $mutexAcquired = $mutex.WaitOne(0) }
+  catch [System.Threading.AbandonedMutexException] { $mutexAcquired = $true }
+  if (-not $mutexAcquired) {
+    Write-Host "Executor device agent already running for $($config.device_id)"
+    exit 0
+  }
+
 $secure = (Get-Content -Raw -Encoding ASCII -LiteralPath $credentialPath).Trim() | ConvertTo-SecureString
 $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try {
@@ -53,4 +69,11 @@ finally {
   $env:EXECUTOR_DEVICE_CA_FILE = $null
   $env:EXECUTOR_DEVICE_TLS_SERVER_NAME = $null
   $token = $null
+}
+}
+finally {
+  if ($mutexAcquired) {
+    try { $mutex.ReleaseMutex() } catch {}
+  }
+  $mutex.Dispose()
 }
