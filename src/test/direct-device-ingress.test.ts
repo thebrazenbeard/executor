@@ -106,3 +106,10 @@ test("Node direct-ingress probe verifies CA, health role, and optional loopback 
   assert.match(probe, /device-ingress/i);
   assert.equal(/rejectUnauthorized\s*:\s*false/i.test(probe), false);
 });
+
+
+test("Windows direct qualifier falls back to a normal temp directory outside GitHub Actions", async () => {
+  const qualifier = await readFile("scripts/qualify-direct-ingress.ps1", "utf8");
+  assert.match(qualifier, /RUNNER_TEMP/);
+  assert.match(qualifier, /\$env:TEMP|GetTempPath/i);
+});
