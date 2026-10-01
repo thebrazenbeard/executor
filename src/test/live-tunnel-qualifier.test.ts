@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 test("live tunnel qualifier drives 64 routed calls without embedding credentials", async () => {
   const script = await readFile("scripts/qualify-live-tunnel.mjs", "utf8");
@@ -42,4 +43,20 @@ test("live tunnel qualifier does not echo the remote endpoint because it may con
   const outputBlock = script.match(/console\.log\(JSON\.stringify\(\{([\s\S]*?)\}\)\);/)?.[1] ?? "";
   assert.ok(outputBlock.length > 0, "qualification result block not found");
   assert.equal(/\bremoteMcpUrl\b/.test(outputBlock), false);
+});
+
+
+test("live tunnel qualifier rejects loopback or plaintext endpoints so local traffic cannot masquerade as tunnel proof", () => {
+  const result = spawnSync(process.execPath, ["scripts/qualify-live-tunnel.mjs"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      EXECUTOR_REMOTE_MCP_URL: "http://127.0.0.1:1/mcp",
+      EXECUTOR_REMOTE_DEVICE_ID: "qualification",
+      EXECUTOR_CLIENT_TOKEN: "qualification-client"
+    }
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr + result.stdout, /non-loopback HTTPS remote MCP URL/i);
 });
