@@ -78,6 +78,19 @@ Executor starts from:
 
 Exact donor heads are recorded in [PROVENANCE.md](PROVENANCE.md).
 
+## Operator runtime
+
+On Windows, Executor includes explicit runtime controls so the service is not a collection of mystery background processes:
+
+```powershell
+.\scripts\Start-ExecutorRuntime.ps1
+.\scripts\Get-ExecutorStatus.ps1
+.\scripts\Restart-ExecutorRuntime.ps1
+.\scripts\Stop-ExecutorRuntime.ps1
+```
+
+Startup verifies the server, workstation attachment, and private-tunnel MCP session before reporting ready. State contains no API keys or bearer credentials, and stop/restart fence recorded PIDs against their current command lines.
+
 ## Status
 
 The V1 branch is qualified on Ubuntu and Windows. Windows qualification builds the exact pinned Desktop Commander payload and observed 8 active execution lanes and 64 active logic lanes while processing 64 concurrent calls.
