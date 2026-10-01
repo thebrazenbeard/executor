@@ -1,0 +1,5 @@
+*.sh text eol=lf
+nodes/synology/synology/scripts/* text eol=lf
+nodes/synology/synology/INFO text eol=lf
+nodes/synology/synology/conf/* text eol=lf
+nodes/synology/synology/WIZARD_UIFILES/* text eol=lf

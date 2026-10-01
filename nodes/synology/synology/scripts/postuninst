@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+if [ "${SYNOPKG_PKG_STATUS:-}" = "UNINSTALL" ]; then
+  rm -f "${SYNOPKG_PKGVAR:?}/executor-node.pid"
+  rm -f "${SYNOPKG_PKGVAR:?}/executor-node.log"
+  rm -f "${SYNOPKG_PKGVAR:?}/config.json"
+  rm -f "${SYNOPKG_PKGHOME:?}/device.token"
+fi
+
+exit 0

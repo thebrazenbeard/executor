@@ -1,0 +1,57 @@
+#!/bin/sh
+set -eu
+
+PKGVAR="${SYNOPKG_PKGVAR:?}"
+PKGHOME="${SYNOPKG_PKGHOME:?}"
+CONFIG="$PKGVAR/config.json"
+TOKEN="$PKGHOME/device.token"
+
+mkdir -p "$PKGVAR" "$PKGHOME"
+umask 077
+
+if [ "${SYNOPKG_PKG_STATUS:-}" = "UPGRADE" ] && [ -f "$CONFIG" ] && [ -f "$TOKEN" ]; then
+  chmod 600 "$CONFIG" "$TOKEN" 2>/dev/null || true
+  exit 0
+fi
+
+: "${wizard_executor_url:?Executor service URL is required}"
+: "${wizard_device_id:?Device ID is required}"
+: "${wizard_device_token:?Device token is required}"
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\r/\\r/g; s/\t/\\t/g'
+}
+
+printf '%s\n' "$wizard_device_token" > "$TOKEN"
+chmod 600 "$TOKEN"
+
+roots_json=""
+root_index=1
+old_ifs="$IFS"
+IFS='
+'
+for root in $(printf '%s\n' "${wizard_share_roots:-}" | tr ',' '\n'); do
+  root="$(printf '%s' "$root" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -n "$root" ] || continue
+  escaped_root="$(json_escape "$root")"
+  entry="{\"id\":\"share$root_index\",\"path\":\"$escaped_root\",\"mode\":\"rw\"}"
+  if [ -n "$roots_json" ]; then
+    roots_json="$roots_json,$entry"
+  else
+    roots_json="$entry"
+  fi
+  root_index=$((root_index + 1))
+done
+IFS="$old_ifs"
+
+executor_url="$(json_escape "$wizard_executor_url")"
+device_id="$(json_escape "$wizard_device_id")"
+token_path="$(json_escape "$TOKEN")"
+tmp="$CONFIG.tmp.$$"
+
+printf '{\n  "executorUrl": "%s",\n  "deviceId": "%s",\n  "deviceTokenFile": "%s",\n  "roots": [%s]\n}\n' \
+  "$executor_url" "$device_id" "$token_path" "$roots_json" > "$tmp"
+chmod 600 "$tmp"
+mv -f "$tmp" "$CONFIG"
+
+exit 0
