@@ -1,6 +1,7 @@
 param(
   [Parameter(Mandatory=$true)][string]$PublicDeviceUrl,
   [Parameter(Mandatory=$true)][string]$CaCertificatePath,
+  [string]$TlsServerName = "executor-device.invalid",
   [switch]$ResolveToLoopback
 )
 
@@ -16,7 +17,7 @@ if ($uri.Scheme -ne "https") { throw "HTTPS required" }
 
 $node = (Get-Command node -ErrorAction Stop).Source
 $probeScript = Join-Path $PSScriptRoot "probe-device-ingress.mjs"
-$args = @($probeScript,"--url",$PublicDeviceUrl,"--ca",$CaCertificatePath)
+$args = @($probeScript,"--url",$PublicDeviceUrl,"--ca",$CaCertificatePath,"--server-name",$TlsServerName)
 if ($ResolveToLoopback) { $args += "--resolve-to-loopback" }
 
 & $node @args
