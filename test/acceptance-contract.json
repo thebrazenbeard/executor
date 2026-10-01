@@ -79,6 +79,16 @@
       "id": "EXE-14",
       "requirement": "Windows runtime captures the tunnel client's per-run health URL and re-probes /readyz instead of treating a surviving tunnel process as current readiness.",
       "automated": true
+    },
+    {
+      "id": "EXE-15",
+      "requirement": "Unauthenticated health probes expose aggregate readiness/capacity state but not connected workstation identities; detailed device inventory requires the Executor client bearer.",
+      "automated": true
+    },
+    {
+      "id": "EXE-16",
+      "requirement": "Installer and real-payload qualifier preseed the pinned @vscode/ripgrep release cache via a direct release asset and verify its SHA-256 before rebuild, without importing the WorkBridge bounded process overlay.",
+      "automated": true
     }
   ]
 }
