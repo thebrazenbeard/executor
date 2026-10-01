@@ -27,3 +27,7 @@ A disconnect or timeout after dispatch is treated as `OUTCOME_UNKNOWN` unless th
 ## Full-authority invariant
 
 Executor has no bounded mode. Security controls protect who may reach the workstation and which device receives an effect; they do not silently replace the workstation command surface with an allowlisted substitute.
+
+## Health disclosure
+
+Unauthenticated `/health` is intentionally usable as a readiness probe and exposes only aggregate service/capacity state. Connected workstation identities are included only when the request carries the configured Executor client bearer.
