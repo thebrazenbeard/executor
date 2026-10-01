@@ -47,7 +47,17 @@ if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
 }
 
 $node = (Get-Command node -ErrorAction Stop).Source
-$tunnelExe = (Get-Command $TunnelClient -ErrorAction Stop).Source
+$tunnelCommand = Get-Command $TunnelClient -ErrorAction SilentlyContinue
+if ($tunnelCommand) {
+  $tunnelExe = $tunnelCommand.Source
+}
+elseif ($TunnelClient -eq "tunnel-client" -or $TunnelClient -eq "tunnel-client.exe") {
+  $installedTunnelClient = (& (Join-Path $PSScriptRoot "Install-ExecutorTunnelClient.ps1") -RuntimeRoot $RuntimeRoot | Out-String | ConvertFrom-Json)
+  $tunnelExe = [string]$installedTunnelClient.path
+}
+else {
+  throw "tunnel-client not found: $TunnelClient"
+}
 
 $clientToken = Require-Env "EXECUTOR_CLIENT_TOKEN"
 $tunnelId = Require-Env "EXECUTOR_TUNNEL_ID"
