@@ -13,10 +13,26 @@ if (!remoteMcpUrl) throw new Error("EXECUTOR_REMOTE_MCP_URL is required");
 if (!deviceId) throw new Error("EXECUTOR_REMOTE_DEVICE_ID is required");
 if (!localClientToken) throw new Error("EXECUTOR_CLIENT_TOKEN is required to read detailed local /health counters");
 
+const remoteUrl = new URL(remoteMcpUrl);
+const remoteHost = remoteUrl.hostname.toLowerCase();
+const loopbackHost = remoteHost === "localhost"
+  || remoteHost.endsWith(".localhost")
+  || remoteHost === "::1"
+  || remoteHost === "0.0.0.0"
+  || remoteHost === "::"
+  || remoteHost.startsWith("127.");
+
+if (remoteUrl.protocol !== "https:" || loopbackHost) {
+  throw new Error("live tunnel qualification requires a non-loopback HTTPS remote MCP URL");
+}
+if (remoteUrl.username || remoteUrl.password) {
+  throw new Error("live tunnel qualification does not accept credentials embedded in the remote MCP URL");
+}
+
 const remoteHeaders = {};
 if (remoteAuthorization) remoteHeaders.authorization = remoteAuthorization;
 
-const transport = new StreamableHTTPClientTransport(new URL(remoteMcpUrl), {
+const transport = new StreamableHTTPClientTransport(remoteUrl, {
   requestInit: { headers: remoteHeaders }
 });
 const client = new Client({ name: "executor-live-tunnel-qualifier", version: "1.0.0" });
