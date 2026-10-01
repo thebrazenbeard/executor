@@ -1,2 +1,63 @@
-param([string]$RuntimeRoot=(Join-Path $env:LOCALAPPDATA "Executor"))
-$ErrorActionPreference="Stop";Set-StrictMode -Version Latest;$sp=Join-Path $RuntimeRoot "direct-state.json";function P([int]$I,[string]$N){$p=Get-CimInstance Win32_Process -Filter "ProcessId = $I" -ErrorAction SilentlyContinue;if(-not$p){return @{alive=$false;identity_match=$false}};return @{alive=$true;identity_match=([string]$p.CommandLine-like"*$N*")}};if(-not(Test-Path $sp)){[pscustomobject]@{running=$false;state_present=$false}|ConvertTo-Json;return};$s=Get-Content -Raw -Encoding UTF8 $sp|ConvertFrom-Json;$c=P ([int]$s.caddy_pid) "caddy";$co=$false;try{$x=(&(Join-Path $PSScriptRoot "Get-ExecutorControlPlaneStatus.ps1") -RuntimeRoot $RuntimeRoot|Out-String|ConvertFrom-Json);$co=[bool]$x.running}catch{};$lo=$false;try{&(Join-Path $PSScriptRoot "Test-ExecutorDirectReachability.ps1") -PublicDeviceUrl ([string]$s.public_device_url) -CaCertificatePath ([string]$s.ca_certificate_path) -TlsServerName ([string]$s.tls_server_name) -ResolveToLoopback|Out-Null;$lo=$true}catch{};[pscustomobject]@{running=($c.alive-and$c.identity_match-and$co-and$lo);state_present=$true;caddy=$c;control_plane_ok=$co;local_tls_ok=$lo;public_device_url=$s.public_device_url;ca_certificate_path=$s.ca_certificate_path;upnp_mapping_created=$s.upnp_mapping_created}|ConvertTo-Json -Depth 8
+[Reading 61 lines from start (total: 61 lines, 0 remaining)]
+
+param([string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Executor"))
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$statePath = Join-Path $RuntimeRoot "direct-state.json"
+
+function Get-ProcessState([int]$ProcessId,[string]$CommandNeedle) {
+  if ($ProcessId -le 0) { return @{ alive = $false; identity_match = $false } }
+  $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
+  if (-not $process) { return @{ alive = $false; identity_match = $false } }
+  return @{ alive = $true; identity_match = ([string]$process.CommandLine -like "*$CommandNeedle*") }
+}
+
+if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
+  [pscustomobject]@{ running = $false; state_present = $false } | ConvertTo-Json
+  return
+}
+
+$state = Get-Content -Raw -Encoding UTF8 $statePath | ConvertFrom-Json
+$caddy = Get-ProcessState ([int]$state.caddy_pid) "caddy"
+
+$controlPlaneOk = $false
+try {
+  $control = (& (Join-Path $PSScriptRoot "Get-ExecutorControlPlaneStatus.ps1") -RuntimeRoot $RuntimeRoot | Out-String | ConvertFrom-Json)
+  $controlPlaneOk = [bool]$control.running
+}
+catch {}
+
+$localTlsOk = $false
+try {
+  & (Join-Path $PSScriptRoot "Test-ExecutorDirectReachability.ps1") `
+    -PublicDeviceUrl ([string]$state.public_device_url) `
+    -CaCertificatePath ([string]$state.ca_certificate_path) `
+    -TlsServerName ([string]$state.tls_server_name) `
+    -ResolveToLoopback | Out-Null
+  $localTlsOk = $true
+}
+catch {}
+
+$natPmpCreated = ($state.PSObject.Properties.Name -contains "nat_pmp_mapping_created") -and [bool]$state.nat_pmp_mapping_created
+$natPmpPid = if ($state.PSObject.Properties.Name -contains "nat_pmp_pid" -and $state.nat_pmp_pid) { [int]$state.nat_pmp_pid } else { 0 }
+$natPmp = if ($natPmpCreated) { Get-ProcessState $natPmpPid "nat-pmp-port-map.mjs" } else { @{ alive = $false; identity_match = $false } }
+$natPmpAlive = $natPmpCreated -and $natPmp.alive -and $natPmp.identity_match
+$upnpCreated = [bool]$state.upnp_mapping_created
+
+[pscustomobject]@{
+  running = ($caddy.alive -and $caddy.identity_match -and $controlPlaneOk -and $localTlsOk -and ((-not $natPmpCreated) -or $natPmpAlive))
+  state_present = $true
+  caddy = $caddy
+  control_plane_ok = $controlPlaneOk
+  local_tls_ok = $localTlsOk
+  public_device_url = $state.public_device_url
+  tls_server_name = $state.tls_server_name
+  ca_certificate_path = $state.ca_certificate_path
+  upnp_mapping_created = $upnpCreated
+  nat_pmp_mapping_created = $natPmpCreated
+  nat_pmp_alive = $natPmpAlive
+  nat_pmp_gateway = if ($state.PSObject.Properties.Name -contains "nat_pmp_gateway") { $state.nat_pmp_gateway } else { $null }
+  public_route_configured = ($upnpCreated -or $natPmpAlive)
+} | ConvertTo-Json -Depth 8

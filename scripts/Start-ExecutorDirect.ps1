@@ -1,3 +1,5 @@
+[Reading 368 lines from start (total: 368 lines, 0 remaining)]
+
 param(
   [string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Executor"),
   [string]$OpenAITunnelCredentialsFile = "",
@@ -143,8 +145,13 @@ $originalConfigHome = [Environment]::GetEnvironmentVariable("XDG_CONFIG_HOME")
 $caddy = $null
 $firewallCreated = $false
 $upnpCreated = $false
+$natPmpCreated = $false
+$natPmpProcess = $null
+$natPmpGateway = ""
+$natPmpReadyPath = Join-Path $RuntimeRoot "nat-pmp-ready.json"
 $firewallName = "Executor Direct $PublicPort"
 $localLanIp = ""
+$node = (Get-Command node -ErrorAction Stop).Source
 
 try {
   $env:EXECUTOR_TUNNEL_ID = $tunnelId
@@ -188,7 +195,10 @@ $siteAddress {
 
   try {
     $network = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq "Up" } | Select-Object -First 1
-    if ($network) { $localLanIp = [string]$network.IPv4Address.IPAddress }
+    if ($network) {
+      $localLanIp = [string]$network.IPv4Address.IPAddress
+      $natPmpGateway = [string]$network.IPv4DefaultGateway.NextHop
+    }
     if (-not [string]::IsNullOrWhiteSpace($localLanIp)) {
       $mappings = (New-Object -ComObject HNetCfg.NATUPnP).StaticPortMappingCollection
       if ($mappings) {
@@ -216,7 +226,47 @@ $siteAddress {
   }
   catch {
     if ($_.Exception.Message -like "UPnP mapping conflict*") { throw }
-    Write-Warning "UPnP unavailable; manual forwarding may be required"
+    Write-Warning "UPnP unavailable; trying NAT-PMP"
+  }
+
+  if (-not $upnpCreated -and -not [string]::IsNullOrWhiteSpace($natPmpGateway)) {
+    $natPmpScript = Join-Path $PSScriptRoot "nat-pmp-port-map.mjs"
+    $natPmpOut = Join-Path $LogRoot "nat-pmp.out.log"
+    $natPmpErr = Join-Path $LogRoot "nat-pmp.err.log"
+    Remove-Item -LiteralPath $natPmpReadyPath,$natPmpOut,$natPmpErr -Force -ErrorAction SilentlyContinue
+    try {
+      $natPmpProcess = Start-Process -FilePath $node -ArgumentList @(
+        ('"{0}"' -f $natPmpScript),
+        "lease",
+        "--gateway",$natPmpGateway,
+        "--protocol","tcp",
+        "--internal-port",[string]$PublicPort,
+        "--external-port",[string]$PublicPort,
+        "--lifetime","3600",
+        "--ready-file",('"{0}"' -f $natPmpReadyPath)
+      ) -PassThru -WindowStyle Hidden -RedirectStandardOutput $natPmpOut -RedirectStandardError $natPmpErr
+
+      Wait-Until { Test-Path -LiteralPath $natPmpReadyPath -PathType Leaf } 10 "NAT-PMP lease did not become ready"
+      $natPmpLease = Get-Content -Raw -Encoding UTF8 $natPmpReadyPath | ConvertFrom-Json
+      if ([int]$natPmpLease.resultCode -ne 0 -or
+          [int]$natPmpLease.internalPort -ne $PublicPort -or
+          [int]$natPmpLease.externalPort -ne $PublicPort -or
+          [int]$natPmpLease.lifetimeSeconds -le 0) {
+        throw "NAT-PMP lease did not preserve TCP $PublicPort"
+      }
+      $natPmpCreated = $true
+    }
+    catch {
+      if ($natPmpProcess -and -not $natPmpProcess.HasExited) {
+        try { Stop-RecordedProcess $natPmpProcess.Id "nat-pmp-port-map.mjs" } catch {}
+      }
+      try {
+        & $node $natPmpScript delete --gateway $natPmpGateway --protocol tcp --internal-port $PublicPort *> $null
+      }
+      catch {}
+      $natPmpProcess = $null
+      Write-Warning "NAT-PMP unavailable; manual forwarding may be required"
+    }
   }
 
   $env:XDG_DATA_HOME = $CaddyDataHome
@@ -252,6 +302,9 @@ $siteAddress {
     firewall_rule_name = $firewallName
     firewall_rule_created = $firewallCreated
     upnp_mapping_created = $upnpCreated
+    nat_pmp_mapping_created = $natPmpCreated
+    nat_pmp_pid = if ($natPmpProcess) { $natPmpProcess.Id } else { $null }
+    nat_pmp_gateway = if ([string]::IsNullOrWhiteSpace($natPmpGateway)) { $null } else { $natPmpGateway }
     local_lan_ip = $localLanIp
     credential_file = if ($OpenAITunnelCredentialsFile) { $OpenAITunnelCredentialsFile } else { $null }
     started_utc = [DateTime]::UtcNow.ToString("o")
@@ -265,6 +318,7 @@ $siteAddress {
   Write-Host "CA certificate: $rootCa"
   Write-Host "No traffic relay is in the device path."
   if ($upnpCreated) { Write-Host "UPnP TCP mapping created." }
+  elseif ($natPmpCreated) { Write-Host "NAT-PMP TCP mapping lease active." }
   else { Write-Warning "Forward TCP $PublicPort to $localLanIp manually if required." }
 
   if (-not [string]::IsNullOrWhiteSpace($DeviceId)) {
@@ -289,6 +343,15 @@ catch {
       if ($mappings) { $mappings.Remove($PublicPort,"TCP") }
     }
     catch {}
+  }
+  if ($natPmpCreated -and -not [string]::IsNullOrWhiteSpace($natPmpGateway)) {
+    try {
+      & $node (Join-Path $PSScriptRoot "nat-pmp-port-map.mjs") delete --gateway $natPmpGateway --protocol tcp --internal-port $PublicPort *> $null
+    }
+    catch {}
+  }
+  if ($natPmpProcess -and -not $natPmpProcess.HasExited) {
+    try { Stop-RecordedProcess $natPmpProcess.Id "nat-pmp-port-map.mjs" } catch {}
   }
   try { & (Join-Path $PSScriptRoot "Stop-ExecutorControlPlane.ps1") -RuntimeRoot $RuntimeRoot } catch {}
   if ($firewallCreated) { Remove-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue }
