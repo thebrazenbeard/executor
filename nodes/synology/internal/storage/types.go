@@ -53,3 +53,24 @@ type FileMeta struct {
 }
 
 type Entry = FileMeta
+
+
+const StreamingBufferBytes = 1024 * 1024
+const RecursiveContentSearchMaxBytes int64 = 16 * 1024 * 1024
+
+type MoveResult struct {
+	Meta   FileMeta `json:"meta"`
+	Atomic bool     `json:"atomic"`
+}
+
+type SearchResult struct {
+	Path string `json:"path"`
+	Kind string `json:"kind"`
+	Size int64  `json:"size"`
+}
+
+type SpaceInfo struct {
+	TotalBytes     uint64 `json:"totalBytes"`
+	FreeBytes      uint64 `json:"freeBytes"`
+	AvailableBytes uint64 `json:"availableBytes"`
+}
