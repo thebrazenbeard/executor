@@ -3,6 +3,7 @@ param(
   [Parameter(Mandatory=$true)][string]$DeviceServiceUrl,
   [string]$CredentialFile = "",
   [string]$CaCertificatePath = "",
+  [string]$TlsServerName = "",
   [string]$SourceRef = "",
   [switch]$InstallLocal
 )
@@ -94,7 +95,7 @@ $installerUrl = "https://raw.githubusercontent.com/thebrazenbeard/executor/$Sour
 $bootstrapPath = '$env:TEMP\Install-ExecutorDevice.ps1'
 $localInstallResult = $null
 if ($InstallLocal) {
-  $localInstallResult = & (Join-Path $PSScriptRoot "Install-ExecutorDevice.ps1") -ServiceUrl $DeviceServiceUrl -DeviceId $DeviceId -DeviceToken $token -CaCertificateBase64 $caCertificateBase64 -SourceRef $SourceRef | Out-String
+  $localInstallResult = & (Join-Path $PSScriptRoot "Install-ExecutorDevice.ps1") -ServiceUrl $DeviceServiceUrl -DeviceId $DeviceId -DeviceToken $token -CaCertificateBase64 $caCertificateBase64 -TlsServerName $TlsServerName -SourceRef $SourceRef | Out-String
 }
 
 $command = "Invoke-WebRequest -UseBasicParsing -Uri " + (Quote-PowerShell $installerUrl) +
@@ -104,6 +105,7 @@ $command = "Invoke-WebRequest -UseBasicParsing -Uri " + (Quote-PowerShell $insta
   " -DeviceId " + (Quote-PowerShell $DeviceId) +
   " -DeviceToken " + (Quote-PowerShell $token) +
   $(if ([string]::IsNullOrWhiteSpace($caCertificateBase64)) { "" } else { " -CaCertificateBase64 " + (Quote-PowerShell $caCertificateBase64) }) +
+  $(if ([string]::IsNullOrWhiteSpace($TlsServerName)) { "" } else { " -TlsServerName " + (Quote-PowerShell $TlsServerName) }) +
   " -SourceRef " + (Quote-PowerShell $SourceRef)
 
 [pscustomobject]@{
@@ -111,6 +113,7 @@ $command = "Invoke-WebRequest -UseBasicParsing -Uri " + (Quote-PowerShell $insta
   device_service_url = $DeviceServiceUrl
   credential_file = $CredentialFile
   source_ref = $SourceRef
+  tls_server_name = if ([string]::IsNullOrWhiteSpace($TlsServerName)) { $null } else { $TlsServerName }
   bootstrap_command = $command
   local_install = if ($InstallLocal) { $localInstallResult.Trim() } else { $null }
   note = if ($InstallLocal) { "Device installed locally without placing its credential in shell history." } else { "The bootstrap command contains this device's credential. Treat it as a secret and use it only on the target laptop." }
