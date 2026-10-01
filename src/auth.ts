@@ -19,8 +19,9 @@ export function tokenAuthorized(actual: string, expected: string): boolean {
 export type DeviceTokenMap = ReadonlyMap<string, string>;
 
 export function parseDeviceTokens(raw: string | undefined): DeviceTokenMap {
-  if (!raw?.trim()) return new Map();
-  const parsed = JSON.parse(raw) as unknown;
+  const normalized = raw?.replace(/^\uFEFF/, "") ?? "";
+  if (!normalized.trim()) return new Map();
+  const parsed = JSON.parse(normalized) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("EXECUTOR_DEVICE_TOKENS_JSON must be a JSON object");
   }
