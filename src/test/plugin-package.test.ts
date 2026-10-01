@@ -60,7 +60,8 @@ test("Desktop Commander installer and qualifier preseed the pinned ripgrep cache
 
   for (const script of [installer, qualifier]) {
     assert.match(script, /Initialize-ExecutorRipgrepDownloadCache/);
-    assert.match(script, /ripgrep-v15\.0\.0/);
+    assert.match(script, /releaseVersion = "v15\.0\.0"/);
+    assert.match(script, /"ripgrep-\$releaseVersion-\$target\.zip"/);
     assert.match(script, /5b7f6a3020739ac4bdf2c32300f14388456361bea054d35270a18a3c9949b932/);
     assert.match(script, /Get-FileHash -Algorithm SHA256/);
     assert.ok(
