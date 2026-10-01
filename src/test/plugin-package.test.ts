@@ -52,3 +52,22 @@ test("Executor installer preserves full-authority 8/64 semantics", async () => {
   assert.equal(installer.includes("workbridge-process-admission"), false);
   assert.equal(installer.includes("bounded-process-concurrency"), false);
 });
+
+
+test("Desktop Commander installer and qualifier preseed the pinned ripgrep cache before rebuild", async () => {
+  const installer = await readFile("scripts/Install-ExecutorDesktopCommander.ps1", "utf8");
+  const qualifier = await readFile("scripts/qualify-real-payload.ps1", "utf8");
+
+  for (const script of [installer, qualifier]) {
+    assert.match(script, /Initialize-ExecutorRipgrepDownloadCache/);
+    assert.match(script, /ripgrep-v15\.0\.0/);
+    assert.match(script, /5b7f6a3020739ac4bdf2c32300f14388456361bea054d35270a18a3c9949b932/);
+    assert.match(script, /Get-FileHash -Algorithm SHA256/);
+    assert.ok(
+      script.indexOf("Initialize-ExecutorRipgrepDownloadCache") < script.indexOf('rebuild "@vscode/ripgrep"')
+    );
+  }
+
+  assert.equal(installer.includes("workbridge-process-admission"), false);
+  assert.equal(qualifier.includes("workbridge-process-admission"), false);
+});
