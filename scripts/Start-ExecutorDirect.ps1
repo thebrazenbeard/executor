@@ -192,12 +192,32 @@ $siteAddress {
     if (-not [string]::IsNullOrWhiteSpace($localLanIp)) {
       $mappings = (New-Object -ComObject HNetCfg.NATUPnP).StaticPortMappingCollection
       if ($mappings) {
-        [void]$mappings.Add($PublicPort,"TCP",$PublicPort,$localLanIp,$true,"Executor Direct")
-        $upnpCreated = $true
+        $existingMapping = $null
+        foreach ($mapping in $mappings) {
+          if ([int]$mapping.ExternalPort -eq $PublicPort -and [string]$mapping.Protocol -eq "TCP") {
+            $existingMapping = $mapping
+            break
+          }
+        }
+        if ($existingMapping) {
+          if ([string]$existingMapping.InternalClient -ne $localLanIp -or
+              [int]$existingMapping.InternalPort -ne $PublicPort -or
+              [string]$existingMapping.Description -ne "Executor Direct") {
+            throw "UPnP mapping conflict on TCP $PublicPort"
+          }
+          $upnpCreated = $true
+        }
+        else {
+          [void]$mappings.Add($PublicPort,"TCP",$PublicPort,$localLanIp,$true,"Executor Direct")
+          $upnpCreated = $true
+        }
       }
     }
   }
-  catch { Write-Warning "UPnP unavailable; manual forwarding may be required" }
+  catch {
+    if ($_.Exception.Message -like "UPnP mapping conflict*") { throw }
+    Write-Warning "UPnP unavailable; manual forwarding may be required"
+  }
 
   $env:XDG_DATA_HOME = $CaddyDataHome
   $env:XDG_CONFIG_HOME = $CaddyConfigHome
