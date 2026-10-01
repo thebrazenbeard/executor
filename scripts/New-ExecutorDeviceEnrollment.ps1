@@ -3,7 +3,8 @@ param(
   [Parameter(Mandatory=$true)][string]$DeviceServiceUrl,
   [string]$CredentialFile = "",
   [string]$CaCertificatePath = "",
-  [string]$SourceRef = ""
+  [string]$SourceRef = "",
+  [switch]$InstallLocal
 )
 
 $ErrorActionPreference = "Stop"
@@ -91,6 +92,11 @@ function Quote-PowerShell([string]$Value) {
 
 $installerUrl = "https://raw.githubusercontent.com/thebrazenbeard/executor/$SourceRef/scripts/Install-ExecutorDevice.ps1"
 $bootstrapPath = '$env:TEMP\Install-ExecutorDevice.ps1'
+$localInstallResult = $null
+if ($InstallLocal) {
+  $localInstallResult = & (Join-Path $PSScriptRoot "Install-ExecutorDevice.ps1") -ServiceUrl $DeviceServiceUrl -DeviceId $DeviceId -DeviceToken $token -CaCertificateBase64 $caCertificateBase64 -SourceRef $SourceRef | Out-String
+}
+
 $command = "Invoke-WebRequest -UseBasicParsing -Uri " + (Quote-PowerShell $installerUrl) +
   " -OutFile " + $bootstrapPath +
   "; & " + $bootstrapPath +
@@ -106,5 +112,6 @@ $command = "Invoke-WebRequest -UseBasicParsing -Uri " + (Quote-PowerShell $insta
   credential_file = $CredentialFile
   source_ref = $SourceRef
   bootstrap_command = $command
-  note = "The bootstrap command contains this device's credential. Treat it as a secret and use it only on the target laptop."
+  local_install = if ($InstallLocal) { $localInstallResult.Trim() } else { $null }
+  note = if ($InstallLocal) { "Device installed locally without placing its credential in shell history." } else { "The bootstrap command contains this device's credential. Treat it as a secret and use it only on the target laptop." }
 } | ConvertTo-Json -Depth 4

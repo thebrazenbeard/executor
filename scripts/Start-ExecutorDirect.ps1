@@ -4,6 +4,7 @@ param(
  [string]$PublicHost="",
  [int]$PublicPort=9443,
  [string]$DeviceId="",
+ [switch]$InstallLocalDevice,
  [string]$ProfilePath=(Join-Path $PSScriptRoot "..\deploy\tunnel-client.executor.example.yaml"),
  [string]$TunnelClient="tunnel-client"
 )
@@ -22,14 +23,14 @@ $pi=$null;if(-not[Net.IPAddress]::TryParse($PublicHost,[ref]$pi)-and[Uri]::Check
 $oi=$env:EXECUTOR_TUNNEL_ID;$os=$env:EXECUTOR_TUNNEL_API_SECRET;$oc=$env:EXECUTOR_CLIENT_TOKEN;$od=$env:XDG_DATA_HOME;$og=$env:XDG_CONFIG_HOME;$caddy=$null;$fw=$false;$upnp=$false;$fwName="Executor Direct $PublicPort"
 try{
  $env:EXECUTOR_TUNNEL_ID=$id;$env:EXECUTOR_TUNNEL_API_SECRET=$sec;$env:EXECUTOR_CLIENT_TOKEN=$client;&(Join-Path $PSScriptRoot "Start-ExecutorControlPlane.ps1") -RuntimeRoot $RuntimeRoot -ProfilePath $ProfilePath -TunnelClient $TunnelClient
- $ins=(&(Join-Path $PSScriptRoot "Install-ExecutorCaddy.ps1") -RuntimeRoot $RuntimeRoot|Out-String|ConvertFrom-Json);$ce=[string]$ins.path;$dp=if($env:EXECUTOR_DEVICE_PORT){[int]$env:EXECUTOR_DEVICE_PORT}else{8788};$site=("https://{0}:{1}" -f $PublicHost,$PublicPort)
+ $ins=(&(Join-Path $PSScriptRoot "Install-ExecutorCaddy.ps1") -RuntimeRoot $RuntimeRoot|Out-String|ConvertFrom-Json);$ce=[string]$ins.path;$dp=if($env:EXECUTOR_DEVICE_PORT){[int]$env:EXECUTOR_DEVICE_PORT}else{8788};$site=("https://{0}:{1}" -f $PublicHost,$PublicPort);$localDeviceUrl=("https://127.0.0.1:{0}" -f $PublicPort);$siteAddresses=if($PublicHost-eq"127.0.0.1"){$site}else{("{0}, {1}" -f $site,$localDeviceUrl)}
  @"
 {
  admin off
  skip_install_trust
  auto_https disable_redirects
 }
-$site {
+$siteAddresses {
  tls internal
  @executorDevice path /device /health
  handle @executorDevice {
@@ -43,6 +44,6 @@ $site {
  $env:XDG_DATA_HOME=$CaddyDataHome;$env:XDG_CONFIG_HOME=$CaddyConfigHome;$co=Join-Path $LogRoot "caddy-direct.out.log";$cr=Join-Path $LogRoot "caddy-direct.err.log";Remove-Item $co,$cr -Force -ErrorAction SilentlyContinue;$caddy=Start-Process -FilePath $ce -ArgumentList @("run","--config",$Caddyfile,"--adapter","caddyfile") -PassThru -WindowStyle Hidden -RedirectStandardOutput $co -RedirectStandardError $cr
  $root=Join-Path $CaddyDataHome "caddy\pki\authorities\local\root.crt";W {Test-Path $root} 30 "Caddy root CA was not provisioned";$curl=(Get-Command curl.exe -ErrorAction Stop).Source;$resolve=("{0}:{1}:127.0.0.1" -f $PublicHost,$PublicPort);$body=&$curl --silent --show-error --fail --cacert $root --resolve $resolve ($site+"/health");if($LASTEXITCODE-ne0){throw "local TLS probe failed"};$h=$body|ConvertFrom-Json;if($h.role-ne"device-ingress"){throw "route mismatch"}
  [pscustomobject]@{schema="EXECUTOR_DIRECT_RUNTIME_V1";caddy_pid=$caddy.Id;public_device_url=$site;public_host=$PublicHost;public_port=$PublicPort;local_device_port=$dp;ca_certificate_path=$root;caddy_config_path=$Caddyfile;caddy_data_home=$CaddyDataHome;firewall_rule_name=$fwName;firewall_rule_created=$fw;upnp_mapping_created=$upnp;local_lan_ip=$lip;credential_file=if($OpenAITunnelCredentialsFile){$OpenAITunnelCredentialsFile}else{$null};started_utc=[DateTime]::UtcNow.ToString("o")}|ConvertTo-Json -Depth 5|Set-Content -Encoding UTF8 $StatePath
- Write-Host "EXECUTOR DIRECT INGRESS READY";Write-Host "Device endpoint: $site";Write-Host "CA certificate: $root";Write-Host "No traffic relay is in the device path.";if($upnp){Write-Host "UPnP TCP mapping created."}else{Write-Warning "Forward TCP $PublicPort to $lip manually if required."};if($DeviceId){&(Join-Path $PSScriptRoot "New-ExecutorDeviceEnrollment.ps1") -DeviceId $DeviceId -DeviceServiceUrl $site -CaCertificatePath $root}
+ Write-Host "EXECUTOR DIRECT INGRESS READY";Write-Host "Device endpoint: $site";Write-Host "CA certificate: $root";Write-Host "No traffic relay is in the device path.";if($upnp){Write-Host "UPnP TCP mapping created."}else{Write-Warning "Forward TCP $PublicPort to $lip manually if required."};if($DeviceId){if($InstallLocalDevice){&(Join-Path $PSScriptRoot "New-ExecutorDeviceEnrollment.ps1") -DeviceId $DeviceId -DeviceServiceUrl $localDeviceUrl -CaCertificatePath $root -InstallLocal|Out-Host;W {$lh=Invoke-RestMethod ("http://127.0.0.1:{0}/health" -f $dp) -TimeoutSec 2;return ([int]$lh.connectedDeviceCount-ge1)} 120 "local Executor device did not connect";Write-Host ("Local Executor device connected: {0}" -f $DeviceId)}else{&(Join-Path $PSScriptRoot "New-ExecutorDeviceEnrollment.ps1") -DeviceId $DeviceId -DeviceServiceUrl $site -CaCertificatePath $root}}
 }catch{if($caddy){try{SP $caddy.Id "caddy"}catch{}};try{&(Join-Path $PSScriptRoot "Stop-ExecutorControlPlane.ps1") -RuntimeRoot $RuntimeRoot}catch{};if($fw){Remove-NetFirewallRule -DisplayName $fwName -ErrorAction SilentlyContinue};throw}
 finally{$env:EXECUTOR_TUNNEL_ID=$oi;$env:EXECUTOR_TUNNEL_API_SECRET=$os;$env:EXECUTOR_CLIENT_TOKEN=$oc;$env:XDG_DATA_HOME=$od;$env:XDG_CONFIG_HOME=$og;$sec=$null;$client=$null}
