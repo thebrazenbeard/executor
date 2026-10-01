@@ -65,6 +65,25 @@ Bind ChatGPT or another remote-MCP-capable client to the actual endpoint associa
 
 Executor injects an optional `deviceId` argument into downstream workstation tool schemas. Executor consumes that routing field and removes it before dispatch, preserving the underlying Desktop Commander tool semantics.
 
+## Qualify the live tunnel
+
+Repository CI proves the Executor service and the pinned Desktop Commander payload at **8 parallel execution lanes** and **64 parallel logic lanes**, but that does not prove your actual tunnel/control-plane path can sustain the same overlap.
+
+With the normal Executor runtime already running, provide the external MCP endpoint and target workstation:
+
+```powershell
+$env:EXECUTOR_REMOTE_MCP_URL = "https://your-live-remote-mcp-endpoint/mcp"
+$env:EXECUTOR_REMOTE_DEVICE_ID = "your-device-id"
+# Only if the remote endpoint itself requires an Authorization header:
+$env:EXECUTOR_REMOTE_AUTHORIZATION = "Bearer <runtime-only-credential>"
+
+npm run qualify:live-tunnel
+```
+
+The qualifier sends 64 concurrent `start_process` calls through `EXECUTOR_REMOTE_MCP_URL` and samples the authenticated local Executor `/health` counters using the already configured `EXECUTOR_CLIENT_TOKEN`. It passes only if the live path observes at least 8 simultaneous execution effects and 64 simultaneous logic lanes.
+
+`EXECUTOR_REMOTE_AUTHORIZATION` is optional and is never written to repository state. The harness is deliberately excluded from ordinary GitHub Actions because CI does not possess your live tunnel identity or credentials.
+
 ## Evidence boundary
 
 Repository CI proves source/build behavior and real-payload 8/64 concurrency on its qualification runner. It does not prove that a personal tunnel is currently active or that a specific workstation is currently connected.
