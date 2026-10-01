@@ -1,3 +1,4 @@
+import type { DeviceProfile } from "./device-profile.js";
 export type JsonRpc = {
   jsonrpc: "2.0";
   id?: string | number | null;
@@ -11,6 +12,7 @@ export type DeviceHello = {
   type: "hello";
   deviceId: string;
   token: string;
+  deviceProfile?: DeviceProfile;
   initializeResult?: Record<string, unknown>;
 };
 

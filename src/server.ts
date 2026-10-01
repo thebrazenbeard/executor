@@ -12,6 +12,7 @@ import { JsonlExecutionEventStore } from "./execution-store.js";
 import { EffectLedger } from "./effect-ledger.js";
 import { randomUUID } from "node:crypto";
 import { augmentToolsList, executorListDevicesTool, extractDeviceId, stripDeviceId } from "./tool-routing.js";
+import { effectiveDeviceCapacity, parseDeviceProfile } from "./device-profile.js";
 
 const { port, host } = serverBindConfig();
 const { port: devicePort, host: deviceHost } = deviceIngressBindConfig();
@@ -271,12 +272,19 @@ wss.on("connection", ws => {
       }
       if (!deviceTokenAuthorized(hello.deviceId, hello.token, deviceToken, currentDeviceTokens)) return ws.close(4004, "unauthorized");
       clearTimeout(helloTimer);
+      let deviceProfile;
+      try {
+        deviceProfile = parseDeviceProfile(hello.deviceProfile);
+      } catch (error) {
+        return ws.close(4003, error instanceof Error ? error.message : "invalid device profile");
+      }
       const initializeResult = hello.initializeResult && typeof hello.initializeResult === "object" && !Array.isArray(hello.initializeResult)
         ? hello.initializeResult
         : {};
-      device = new DeviceConnection(hello.deviceId, ws, capacity.executionPerDevice, initializeResult);
-      registry.attach(device);
-      ws.send(JSON.stringify({ type: "ready", deviceId: device.id }));
+      const deviceExecutionCapacity = effectiveDeviceCapacity(capacity.executionPerDevice, deviceProfile);
+      device = new DeviceConnection(hello.deviceId, ws, deviceExecutionCapacity, initializeResult, deviceProfile);
+      const generation = registry.attach(device);
+      ws.send(JSON.stringify({ type: "ready", deviceId: device.id, generation }));
       return;
     }
     const response = message as Partial<DeviceResponse>;
