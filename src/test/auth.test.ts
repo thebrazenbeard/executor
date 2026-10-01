@@ -22,6 +22,9 @@ test("per-device tokens bind credentials to workstation identity while preservin
   assert.equal(deviceTokenAuthorized("lappy", "shared-secret", "shared-secret", tokens), false);
   assert.equal(deviceTokenAuthorized("other", "shared-secret", "shared-secret", tokens), true);
   assert.equal(deviceTokenAuthorized("other", "anything", "", tokens), false);
+
+  const bomTokens = parseDeviceTokens("\uFEFF{\"lappy\":\"lappy-secret\"}");
+  assert.equal(deviceTokenAuthorized("lappy", "lappy-secret", "", bomTokens), true);
 });
 
 test("per-device token configuration rejects malformed identities and secrets", async () => {
