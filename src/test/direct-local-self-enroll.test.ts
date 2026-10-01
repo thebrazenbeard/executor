@@ -23,3 +23,19 @@ test("direct Caddy config issues an internal certificate for local self-enrollme
   assert.match(start, /tls\s+internal/i);
   assert.match(start, /reverse_proxy\s+127\.0\.0\.1:/i);
 });
+
+
+test("direct runtime owns dedicated private ports and generates its tunnel profile", async () => {
+  const start = await readFile("scripts/Start-ExecutorDirect.ps1", "utf8");
+  const restart = await readFile("scripts/Restart-ExecutorDirect.ps1", "utf8");
+
+  assert.match(start, /\[int\]\$McpPort\s*=\s*18887/i);
+  assert.match(start, /\[int\]\$DevicePort\s*=\s*18888/i);
+  assert.match(start, /direct-tunnel-profile\.yaml/i);
+  assert.match(start, /127\.0\.0\.1:\$McpPort\/mcp|127\.0\.0\.1:\$\(\$McpPort\)\/mcp/i);
+  assert.match(start, /\$env:PORT\s*=\s*\[string\]\$McpPort|\$env:PORT\s*=\s*"?\$McpPort/i);
+  assert.match(start, /\$env:EXECUTOR_DEVICE_PORT\s*=\s*\[string\]\$DevicePort|\$env:EXECUTOR_DEVICE_PORT\s*=\s*"?\$DevicePort/i);
+  assert.match(start, /local_mcp_port/i);
+  assert.match(restart, /McpPort/i);
+  assert.match(restart, /DevicePort/i);
+});
