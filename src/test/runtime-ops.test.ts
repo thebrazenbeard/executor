@@ -26,6 +26,10 @@ test("Executor ships explicit start stop restart and status operations", async (
 
   assert.match(status, /runtime-state\.json/);
   assert.match(status, /\/health/);
+  assert.match(status, /state\.local_mcp/);
+  assert.equal(status.includes("http://127.0.0.1:8787/health"), false);
+  assert.match(stop, /allSafe/);
+  assert.match(stop, /Runtime state retained/);
 });
 
 test("runtime state must not persist tunnel API secret or bearer credentials", async () => {
