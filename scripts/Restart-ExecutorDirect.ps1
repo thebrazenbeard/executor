@@ -8,6 +8,7 @@ param(
   [int]$DevicePort = 18888,
   [string]$DeviceId = "",
   [string]$ProfilePath = "",
+  [ValidateSet("Auto","UPnP","NATPMP","Manual")][string]$PortMappingMode = "Auto",
   [string]$TunnelClient = "tunnel-client"
 )
 
@@ -23,6 +24,7 @@ if (Test-Path -LiteralPath $StatePath -PathType Leaf) {
     if ($PublicPort -eq 9443 -and $state.public_port) { $PublicPort = [int]$state.public_port }
     if ($McpPort -eq 18887 -and $state.local_mcp_port) { $McpPort = [int]$state.local_mcp_port }
     if ($DevicePort -eq 18888 -and $state.local_device_port) { $DevicePort = [int]$state.local_device_port }
+    if ($PortMappingMode -eq "Auto" -and $state.port_mapping_mode_requested) { $PortMappingMode = [string]$state.port_mapping_mode_requested }
   }
   catch {}
 }
@@ -39,6 +41,7 @@ $startArgs = @{
   DevicePort = $DevicePort
   DeviceId = $DeviceId
   ProfilePath = $ProfilePath
+  PortMappingMode = $PortMappingMode
   TunnelClient = $TunnelClient
 }
 & (Join-Path $PSScriptRoot "Start-ExecutorDirect.ps1") @startArgs

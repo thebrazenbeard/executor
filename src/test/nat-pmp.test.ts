@@ -30,9 +30,12 @@ test("direct runtime falls back to a renewable NAT-PMP lease and cleans it up", 
   const helper = await readFile("scripts/nat-pmp-port-map.mjs", "utf8");
 
   assert.match(start, /nat-pmp-port-map\.mjs/i);
+  assert.match(start, /ValidateSet\("Auto","UPnP","NATPMP","Manual"\)/i);
+  assert.match(start, /PortMappingMode/i);
   assert.match(start, /nat_pmp_mapping_created/i);
   assert.match(start, /nat_pmp_pid/i);
   assert.match(start, /nat_pmp_gateway/i);
+  assert.match(start, /port_mapping_method/i);
   assert.match(start, /lease/i);
   assert.match(stop, /nat-pmp-port-map\.mjs/i);
   assert.match(stop, /nat_pmp_mapping_created/i);
