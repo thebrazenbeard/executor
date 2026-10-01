@@ -136,6 +136,17 @@ test("Executor exposes RDC-style device routing while preserving downstream tool
     assert.equal(routedResponse.status, 200);
     assert.deepEqual(forwardedToolArguments.at(-1), { message: "hello" });
 
+    const publicHealth = await fetch(`http://127.0.0.1:${port}/health`);
+    const publicHealthBody = await publicHealth.json() as any;
+    assert.equal(publicHealthBody.connectedDeviceCount, 1);
+    assert.equal("devices" in publicHealthBody, false);
+
+    const authorizedHealth = await fetch(`http://127.0.0.1:${port}/health`, {
+      headers: { authorization: "Bearer client-test" }
+    });
+    const authorizedHealthBody = await authorizedHealth.json() as any;
+    assert.equal(authorizedHealthBody.devices[0].deviceId, "fake");
+
     assert.equal(forwardedMethods.includes("initialize"), false);
     assert.equal(forwardedMethods.includes("notifications/initialized"), false);
   } finally {
