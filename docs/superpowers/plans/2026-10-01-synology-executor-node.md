@@ -381,8 +381,9 @@ Commit: `feat: add read only DSM inspection tools`
 - Adapter interface:
   - `ReadCurrent(ctx, args) (State, error)`
   - `Describe(current, args) (ProposalDescription, error)`
-  - `Apply(ctx, args) error`
+  - `Apply(ctx, args) (ApplyOutcome, error)`
   - `ReadBack(ctx, args) (State, error)`.
+- `ApplyOutcome` may carry an `AfterResponse` callback. The bridge MUST serialize and flush the successful `tools/call` response before invoking that callback.
 
 - [ ] **Step 1: Write proposal-integrity tests**
 
@@ -403,7 +404,7 @@ Expected: FAIL.
 
 - [ ] **Step 5: Implement engine and self-management adapters**
 
-The restart adapter launches only the current verified ExecutorNode executable/configuration as the same package user, confirms child startup, then exits. No `sudo`, `synopkg`, or root helper.
+The restart adapter prepares a same-user replacement process but does not switch connections during the RPC. `admin.apply_change` returns a successful verified result first; only after the bridge has written that response does the `AfterResponse` callback release the replacement process to connect and then exit the parent. This prevents a successful restart from being misclassified as `OUTCOME_UNKNOWN`. No `sudo`, `synopkg`, or root helper.
 
 - [ ] **Step 6: Verify**
 
@@ -419,7 +420,7 @@ Commit: `feat: require verified proposals for DSM mutations`
 **Files:**
 - Create: `nodes/synology/synology/INFO`
 - Create: `nodes/synology/synology/conf/privilege`
-- Create: `nodes/synology/synology/conf/resource`
+- Create: `nodes/synology/synology/conf/resource` (an empty resource object; V1 does not request `data-share` because arbitrary pre-existing shares cannot be wildcard-acquired safely)
 - Create: all required files under `nodes/synology/synology/scripts/`
 - Create: `nodes/synology/synology/WIZARD_UIFILES-src/package.json`
 - Create: `nodes/synology/synology/WIZARD_UIFILES-src/webpack.config.js`
