@@ -75,3 +75,26 @@ func TestChildBarrierUnsetsRestartEnvironmentAndWritesGeneration(t *testing.T){
 	data,err:=os.ReadFile(connected);if err!=nil{t.Fatal(err)}
 	if string(data)!="17"{t.Fatalf("connected marker=%q",data)}
 }
+
+
+func TestOSReplacementCoordinatorTwentyRealProcessCycles(t *testing.T){
+	base:=t.TempDir()
+	for i:=0;i<20;i++{
+		launcher:=NewOSReplacementLauncher(OSReplacementLauncherConfig{
+			Executable:os.Args[0],
+			Args:[]string{"-test.run=TestRestartReplacementHelper"},
+			Env:append(os.Environ(),"EXECUTOR_TEST_RESTART_HELPER=1"),
+			TempDir:base,
+			PollInterval:2*time.Millisecond,
+		})
+		shutdown:=make(chan struct{},1)
+		coord:=NewRestartCoordinator(launcher,func(){select{case shutdown<-struct{}{}:default:}},2*time.Second)
+		after,err:=coord.Prepare()
+		if err!=nil{t.Fatalf("cycle %d prepare: %v",i,err)}
+		after()
+		select{
+		case<-shutdown:
+		case<-time.After(3*time.Second):t.Fatalf("cycle %d did not complete handoff",i)
+		}
+	}
+}
