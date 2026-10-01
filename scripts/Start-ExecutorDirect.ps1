@@ -207,10 +207,15 @@ $siteAddresses {
 
   $curl = (Get-Command curl.exe -ErrorAction Stop).Source
   $resolve = ("{0}:{1}:127.0.0.1" -f $PublicHost,$PublicPort)
-  $body = & $curl --silent --show-error --fail --ssl-revoke-best-effort --cacert $rootCa --resolve $resolve ($publicUrl + "/health")
-  if ($LASTEXITCODE -ne 0) { throw "local TLS probe failed" }
-  $health = $body | ConvertFrom-Json
-  if ($health.role -ne "device-ingress") { throw "route mismatch" }
+  Wait-Until {
+    $body = & $curl --silent --show-error --fail --ssl-revoke-best-effort --cacert $rootCa --resolve $resolve ($publicUrl + "/health") 2>$null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    try {
+      $health = $body | ConvertFrom-Json
+      return ($health.status -eq "ok" -and $health.role -eq "device-ingress")
+    }
+    catch { return $false }
+  } 30 "direct TLS health probe did not become ready"
 
   [pscustomobject]@{
     schema = "EXECUTOR_DIRECT_RUNTIME_V1"
