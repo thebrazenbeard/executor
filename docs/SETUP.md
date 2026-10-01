@@ -22,7 +22,7 @@ The installer intentionally does not apply the donor WorkBridge four-process ove
 
 ## Start the service
 
-Configure `EXECUTOR_CLIENT_TOKEN`, `EXECUTOR_DEVICE_TOKEN`, `EXECUTOR_EXECUTION_CAPACITY=8`, `EXECUTOR_LOGIC_CAPACITY=64`, and the allowed browser origin. Start Executor with `npm start`.
+Configure `EXECUTOR_CLIENT_TOKEN`, `EXECUTOR_EXECUTION_CAPACITY=8`, `EXECUTOR_LOGIC_CAPACITY=64`, and the allowed browser origin. For device ingress, configure either a shared `EXECUTOR_DEVICE_TOKEN`, `EXECUTOR_DEVICE_TOKENS_JSON` as a JSON object mapping device IDs to tokens, or both. A mapped device ID requires its mapped token and cannot fall back to the shared token. Start Executor with `npm start`.
 
 For the private tunnel-first path, bind the service to loopback on port 8787.
 
