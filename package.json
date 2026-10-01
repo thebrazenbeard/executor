@@ -12,7 +12,8 @@
     "start": "node dist/server.js",
     "device": "node dist/device-agent.js",
     "test:unit": "node scripts/run-tests.mjs",
-    "audit": "npm audit --audit-level=high"
+    "audit": "npm audit --audit-level=high",
+    "qualify:live-tunnel": "node scripts/qualify-live-tunnel.mjs"
   },
   "dependencies": {
     "ws": "8.22.0"
