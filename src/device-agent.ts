@@ -210,7 +210,12 @@ function connect() {
   });
 
   socket.on("error", error => console.error(JSON.stringify({ status: "device-websocket-error", message: error.message })));
-  socket.on("close", () => {
+  socket.on("close", (code, reason) => {
+    console.error(JSON.stringify({
+      status: "device-websocket-closed",
+      code,
+      reason: reason.toString()
+    }));
     if (stopped) return;
     for (const marker of pendingOutbound.values()) {
       console.error(JSON.stringify({ status: "request-outcome-unknown-after-disconnect", requestId: marker.requestId }));
