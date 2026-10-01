@@ -3,6 +3,7 @@ param(
   [Parameter(Mandatory=$true)][string]$DeviceId,
   [Parameter(Mandatory=$true)][string]$DeviceToken,
   [string]$CaCertificateBase64 = "",
+  [string]$TlsServerName = "",
   [string]$SourceRepository = "https://github.com/thebrazenbeard/executor.git",
   [string]$SourceRef = "build/executor-v1",
   [string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Executor"),
@@ -109,6 +110,7 @@ try {
     source_commit = $sourceCommit
     task_name = $TaskName
     ca_path = if (Test-Path -LiteralPath $caPath -PathType Leaf) { $caPath } else { $null }
+    tls_server_name = if ([string]::IsNullOrWhiteSpace($TlsServerName)) { $null } else { $TlsServerName }
   } | ConvertTo-Json -Depth 4
   $configJson | Set-Content -LiteralPath $configPath -Encoding UTF8
 
@@ -129,6 +131,7 @@ try {
     manifest_sha256 = $manifestHash
     task_name = $TaskName
     config_path = $configPath
+    tls_server_name = if ([string]::IsNullOrWhiteSpace($TlsServerName)) { $null } else { $TlsServerName }
     credential_storage = "Windows DPAPI for current user"
   } | ConvertTo-Json -Depth 4
 }
