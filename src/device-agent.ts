@@ -12,6 +12,7 @@ const token = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
 const deviceId = process.env.EXECUTOR_DEVICE_ID ?? "";
 const trustedManifestHash = process.env.EXECUTOR_TRUSTED_MANIFEST_SHA256 ?? "";
 const deviceCaFile = process.env.EXECUTOR_DEVICE_CA_FILE?.trim() ?? "";
+const tlsServerName = process.env.EXECUTOR_DEVICE_TLS_SERVER_NAME?.trim() ?? "";
 const installRoot = process.env.EXECUTOR_INSTALL_ROOT ?? (process.platform === "win32"
   ? "C:\\ProgramData\\Executor\\DesktopCommanderMCP"
   : "/opt/executor/DesktopCommanderMCP");
@@ -155,7 +156,17 @@ function connect() {
   assertSafeDeviceServiceUrl(url);
   url.pathname = "/device";
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, { maxPayload: 2_000_000, ...(deviceCa ? { ca: deviceCa } : {}) });
+  const tlsPort = url.port || (url.protocol === "wss:" ? "443" : "");
+  const tlsHostHeader = tlsServerName
+    ? tlsServerName + (tlsPort && tlsPort !== "443" ? `:${tlsPort}` : "")
+    : "";
+  const socket = new WebSocket(url, {
+    maxPayload: 2_000_000,
+    ...(deviceCa ? { ca: deviceCa } : {}),
+    ...(tlsServerName && url.protocol === "wss:"
+      ? { servername: tlsServerName, headers: { Host: tlsHostHeader } }
+      : {})
+  });
   ws = socket;
 
   socket.on("open", () => {
