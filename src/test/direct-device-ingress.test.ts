@@ -32,6 +32,8 @@ test("direct runtime has no traffic relay and fronts only device ingress", async
   assert.match(start, /New-NetFirewallRule/);
   assert.match(start, /HNetCfg\.NATUPnP/);
   assert.match(start, /root\.crt/);
+  assert.match(start, /ssl-revoke-best-effort/i);
+  assert.match(start, /StaticPortMappingCollection[\s\S]*Remove\(/i);
   assert.match(start, /New-ExecutorDeviceEnrollment\.ps1/);
   assert.equal(/cloudflare|tailscale|ngrok|tunnel\s+--url/i.test(start), false);
   assert.equal(/function\s+(NV|SP)\b/i.test(start), false, "direct runtime helper names must not collide with PowerShell aliases");
@@ -66,6 +68,7 @@ test("direct reachability tool exists and does not invoke a relay service", asyn
   const probe = await readFile("scripts/Test-ExecutorDirectReachability.ps1", "utf8");
   assert.match(probe, /--cacert|CaCertificatePath/);
   assert.match(probe, /\/health/);
+  assert.match(probe, /ssl-revoke-best-effort/i);
   assert.equal(/cloudflare|tailscale|ngrok/i.test(probe), false);
 });
 
