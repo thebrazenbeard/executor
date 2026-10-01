@@ -165,6 +165,7 @@ function connect() {
   console.error(JSON.stringify({ status: "device-websocket-connect-attempt", transport: url.protocol }));
   const socket = new WebSocket(url, {
     maxPayload: 2_000_000,
+    handshakeTimeout: 10_000,
     ...(deviceCa ? { ca: deviceCa } : {}),
     ...(tlsServerName && url.protocol === "wss:"
       ? { servername: tlsServerName, headers: { Host: tlsHostHeader } }
@@ -173,6 +174,7 @@ function connect() {
   ws = socket;
 
   socket.on("open", () => {
+    console.error(JSON.stringify({ status: "device-websocket-open" }));
     reconnectAttempt = 0;
     socket.send(JSON.stringify({
       type: "hello",
@@ -185,6 +187,10 @@ function connect() {
   socket.on("message", raw => {
     let message: Partial<DeviceRequest> & { type?: string };
     try { message = JSON.parse(raw.toString()); } catch { socket.close(4002, "invalid json"); return; }
+    if (message.type === "ready") {
+      console.error(JSON.stringify({ status: "device-websocket-ready" }));
+      return;
+    }
     if (message.type !== "request" || typeof message.requestId !== "string" || !message.payload) return;
     if (message.payload.id === undefined) {
       child.stdin.write(JSON.stringify(message.payload) + LF, error => {
