@@ -51,3 +51,24 @@ jobs:
         shell: powershell
         run: .\scripts\qualify-real-payload.ps1
       - run: npm run audit
+
+
+  synology-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: nodes/synology/go.sum
+      - name: Test Synology node
+        working-directory: nodes/synology
+        run: go test ./...
+      - name: Cross-compile DS216 ARMv7 node
+        working-directory: nodes/synology
+        env:
+          GOOS: linux
+          GOARCH: arm
+          GOARM: "7"
+          CGO_ENABLED: "0"
+        run: go build -o build/executor-node ./cmd/executor-node

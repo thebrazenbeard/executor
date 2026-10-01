@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type WebSocket from "ws";
 import type { DeviceRequest, DeviceResponse, JsonRpc } from "./protocol.js";
 import { LanePool } from "./lanes.js";
+import type { DeviceProfile } from "./device-profile.js";
 
 export class DeviceEffectError extends Error {
   constructor(message: string, readonly disposition: "FAILED" | "OUTCOME_UNKNOWN") { super(message); this.name = "DeviceEffectError"; }
@@ -21,7 +22,8 @@ export class DeviceConnection {
     readonly id: string,
     readonly socket: WebSocket,
     executionCapacity: number,
-    readonly initializeResult: Record<string, unknown> = {}
+    readonly initializeResult: Record<string, unknown> = {},
+    readonly deviceProfile?: DeviceProfile
   ) {
     this.execution = new LanePool(executionCapacity);
   }
@@ -78,6 +80,7 @@ export type DeviceAttachment = {
   generation: number;
   connectedAt: number;
   executionCapacity: number;
+  deviceProfile?: DeviceProfile;
 };
 
 export class DeviceRegistry {
@@ -85,12 +88,14 @@ export class DeviceRegistry {
   private generations = new Map<string, number>();
   private connectedAt = new Map<string, number>();
 
-  attach(device: DeviceConnection) {
+  attach(device: DeviceConnection): number {
     const prior = this.devices.get(device.id);
     if (prior && prior !== device) prior.socket.close(4001, "replaced by newer connection");
     this.devices.set(device.id, device);
-    this.generations.set(device.id, (this.generations.get(device.id) ?? 0) + 1);
+    const generation = (this.generations.get(device.id) ?? 0) + 1;
+    this.generations.set(device.id, generation);
     this.connectedAt.set(device.id, Date.now());
+    return generation;
   }
 
   detach(device: DeviceConnection) {
@@ -110,7 +115,13 @@ export class DeviceRegistry {
   describe(id: string): DeviceAttachment | undefined {
     const device = this.devices.get(id);
     if (!device) return undefined;
-    return { deviceId: id, generation: this.generations.get(id) ?? 0, connectedAt: this.connectedAt.get(id) ?? 0, executionCapacity: device.execution.limit };
+    return {
+      deviceId: id,
+      generation: this.generations.get(id) ?? 0,
+      connectedAt: this.connectedAt.get(id) ?? 0,
+      executionCapacity: device.execution.limit,
+      ...(device.deviceProfile ? { deviceProfile: device.deviceProfile } : {})
+    };
   }
   list() { return [...this.devices.keys()].sort(); }
 }
