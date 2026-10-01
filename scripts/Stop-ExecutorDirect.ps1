@@ -25,15 +25,15 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
   $natPmpGateway = if ($state.PSObject.Properties.Name -contains "nat_pmp_gateway") { [string]$state.nat_pmp_gateway } else { "" }
   $natPmpPid = if ($state.PSObject.Properties.Name -contains "nat_pmp_pid" -and $state.nat_pmp_pid) { [int]$state.nat_pmp_pid } else { 0 }
 
+  if ($natPmpPid -gt 0 -and -not (Stop-RecordedProcess $natPmpPid "nat-pmp-port-map.mjs")) {
+    throw "NAT-PMP PID identity mismatch"
+  }
   if ($natPmpCreated -and -not [string]::IsNullOrWhiteSpace($natPmpGateway)) {
     try {
       $node = (Get-Command node -ErrorAction Stop).Source
       & $node (Join-Path $PSScriptRoot "nat-pmp-port-map.mjs") delete --gateway $natPmpGateway --protocol tcp --internal-port ([int]$state.public_port) *> $null
     }
     catch {}
-  }
-  if ($natPmpPid -gt 0 -and -not (Stop-RecordedProcess $natPmpPid "nat-pmp-port-map.mjs")) {
-    throw "NAT-PMP PID identity mismatch"
   }
 
   if ([bool]$state.upnp_mapping_created) {

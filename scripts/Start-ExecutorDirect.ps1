@@ -364,14 +364,14 @@ catch {
     }
     catch {}
   }
+  if ($natPmpProcess -and -not $natPmpProcess.HasExited) {
+    try { Stop-RecordedProcess $natPmpProcess.Id "nat-pmp-port-map.mjs" } catch {}
+  }
   if ($natPmpCreated -and -not [string]::IsNullOrWhiteSpace($natPmpGateway)) {
     try {
       & $node (Join-Path $PSScriptRoot "nat-pmp-port-map.mjs") delete --gateway $natPmpGateway --protocol tcp --internal-port $PublicPort *> $null
     }
     catch {}
-  }
-  if ($natPmpProcess -and -not $natPmpProcess.HasExited) {
-    try { Stop-RecordedProcess $natPmpProcess.Id "nat-pmp-port-map.mjs" } catch {}
   }
   try { & (Join-Path $PSScriptRoot "Stop-ExecutorControlPlane.ps1") -RuntimeRoot $RuntimeRoot } catch {}
   if ($firewallCreated) { Remove-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue }

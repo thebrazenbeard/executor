@@ -39,6 +39,16 @@ test("direct runtime falls back to a renewable NAT-PMP lease and cleans it up", 
   assert.match(start, /lease/i);
   assert.match(stop, /nat-pmp-port-map\.mjs/i);
   assert.match(stop, /nat_pmp_mapping_created/i);
+  const stopLeaseProcess = stop.indexOf('Stop-RecordedProcess $natPmpPid "nat-pmp-port-map.mjs"');
+  const deleteLeaseMapping = stop.indexOf('"nat-pmp-port-map.mjs") delete');
+  assert.ok(stopLeaseProcess >= 0 && deleteLeaseMapping >= 0);
+  assert.ok(stopLeaseProcess < deleteLeaseMapping, "stop must kill the NAT-PMP renewer before deleting its mapping");
+
+  const rollbackLeaseProcess = start.lastIndexOf('Stop-RecordedProcess $natPmpProcess.Id "nat-pmp-port-map.mjs"');
+  const rollbackDeleteMapping = start.lastIndexOf('"nat-pmp-port-map.mjs") delete');
+  assert.ok(rollbackLeaseProcess >= 0 && rollbackDeleteMapping >= 0);
+  assert.ok(rollbackLeaseProcess < rollbackDeleteMapping, "startup rollback must kill the NAT-PMP renewer before deleting its mapping");
+
   assert.match(status, /nat_pmp_mapping_created/i);
   assert.match(status, /nat_pmp_alive/i);
 
