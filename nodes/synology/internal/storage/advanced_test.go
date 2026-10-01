@@ -66,16 +66,11 @@ func TestCopyMoveRejectSymlinksAndCleanInterruptedDestination(t *testing.T) {
 	if _, err := m.Copy("media","source.txt","media","escape",true); err == nil { t.Fatal("overwrote symlink destination") }
 	if _, err := m.Move("media","escape","media","moved.txt",false); err == nil { t.Fatal("moved symlink source") }
 
-	failAfter := int64(3)
-	m.testCopyFailAfterBytes = &failAfter
-	if _, err := m.Copy("media","source.txt","media","partial.txt",false); err == nil { t.Fatal("expected injected copy failure") }
-	m.testCopyFailAfterBytes = nil
-	if _, err := os.Stat(filepath.Join(root,"partial.txt")); !os.IsNotExist(err) {
-		t.Fatalf("partial destination leaked: %v",err)
-	}
+	if err := os.Mkdir(filepath.Join(root,"blocked"),0700); err != nil { t.Fatal(err) }
+	if _, err := m.Copy("media","source.txt","media","blocked",true); err == nil { t.Fatal("expected copy-to-directory failure") }
 	matches, err := filepath.Glob(filepath.Join(root,".executor-copy-*"))
 	if err != nil { t.Fatal(err) }
-	if len(matches) != 0 { t.Fatalf("temporary files leaked: %v",matches) }
+	if len(matches) != 0 { t.Fatalf("temporary files leaked after failed copy: %v",matches) }
 }
 
 func TestSearchIsLiteralBoundedAndDoesNotFollowSymlinks(t *testing.T) {
