@@ -45,7 +45,9 @@ test("control plane can bootstrap the official OpenAI tunnel-client when it is n
   assert.match(installer, /api\.github\.com\/repos\/openai\/tunnel-client\/releases\/latest/i);
   assert.match(installer, /SHA256SUMS\.txt/);
   assert.match(installer, /Get-FileHash[^\n]*SHA256|SHA256[\s\S]*Get-FileHash/i);
-  assert.match(installer, /windows-(amd64|arm64)/i);
+  assert.match(installer, /"X64"\s*\{\s*\$assetArch\s*=\s*"amd64"/i);
+  assert.match(installer, /"Arm64"\s*\{\s*\$assetArch\s*=\s*"arm64"/i);
+  assert.match(installer, /tunnel-client-v\{0\}-windows-\{1\}\.zip/i);
   assert.match(start, /Install-ExecutorTunnelClient\.ps1/);
   assert.match(start, /Get-Command[^\n]*TunnelClient[\s\S]*SilentlyContinue/i);
   assert.match(workflow, /Install-ExecutorTunnelClient\.ps1/);
