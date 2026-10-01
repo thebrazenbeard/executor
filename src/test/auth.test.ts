@@ -12,3 +12,21 @@ test("device token authorization requires an exact match", () => {
   assert.equal(tokenAuthorized("device-secret", "device-secret"), true);
   assert.equal(tokenAuthorized("device-secret-2", "device-secret"), false);
 });
+
+
+test("per-device tokens bind credentials to workstation identity while preserving optional shared fallback", async () => {
+  const { parseDeviceTokens, deviceTokenAuthorized } = await import("../auth.js");
+  const tokens = parseDeviceTokens('{"lappy":"lappy-secret","vera":"vera-secret"}');
+
+  assert.equal(deviceTokenAuthorized("lappy", "lappy-secret", "shared-secret", tokens), true);
+  assert.equal(deviceTokenAuthorized("lappy", "shared-secret", "shared-secret", tokens), false);
+  assert.equal(deviceTokenAuthorized("other", "shared-secret", "shared-secret", tokens), true);
+  assert.equal(deviceTokenAuthorized("other", "anything", "", tokens), false);
+});
+
+test("per-device token configuration rejects malformed identities and secrets", async () => {
+  const { parseDeviceTokens } = await import("../auth.js");
+  assert.throws(() => parseDeviceTokens("{bad json"), /JSON/);
+  assert.throws(() => parseDeviceTokens('{"../bad":"secret"}'), /device id/i);
+  assert.throws(() => parseDeviceTokens('{"lappy":""}'), /token/i);
+});
