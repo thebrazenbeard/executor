@@ -1,0 +1,33 @@
+{
+  "interface": {
+    "displayName": "Executor",
+    "shortDescription": "Executor-powered workstation control",
+    "longDescription": "Connects ChatGPT and Codex to the Executor remote MCP service and its Executor-pinned Desktop Commander workstation payload.",
+    "developerName": "Patrick A. Sims",
+    "category": "Productivity",
+    "capabilities": [
+      "Inspect and edit authorized workstation files",
+      "Search authorized workstation paths",
+      "Run and interact with workstation processes",
+      "Inspect and manage workstation processes",
+      "Select connected Executor workstations"
+    ],
+    "defaultPrompt": [
+      "Use Executor to inspect the connected workstation and continue the active work.",
+      "Run the requested command through Executor and verify the result."
+    ]
+  },
+  "name": "executor",
+  "version": "0.1.2",
+  "description": "Operate authorized workstations through Executor and a Executor-pinned Desktop Commander payload.",
+  "author": {
+    "name": "Patrick A. Sims"
+  },
+  "keywords": [
+    "executor",
+    "mcp",
+    "workstation"
+  ],
+  "repository": "https://github.com/thebrazenbeard/executor",
+  "skills": "./skills"
+}
