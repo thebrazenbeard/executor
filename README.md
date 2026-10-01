@@ -80,4 +80,8 @@ Exact donor heads are recorded in [PROVENANCE.md](PROVENANCE.md).
 
 ## Status
 
-Source construction is in progress on `build/executor-v1`. Repository source, installed workstation payload, live device attachment, public deployment, and end-to-end runtime proof are separate evidence classes and must not be conflated.
+The V1 branch is qualified on Ubuntu and Windows. Windows qualification builds the exact pinned Desktop Commander payload and observed 8 active execution lanes and 64 active logic lanes while processing 64 concurrent calls.
+
+See [docs/SETUP.md](docs/SETUP.md) for the self-hosted tunnel and workstation setup.
+
+Repository qualification does not prove that a particular private tunnel or workstation is currently online. Runtime activation remains separate evidence.
