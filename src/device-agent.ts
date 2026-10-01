@@ -5,6 +5,7 @@ import path from "node:path";
 import WebSocket from "ws";
 import type { DeviceRequest, JsonRpc } from "./protocol.js";
 import { assertSafeDeviceServiceUrl, resolveInsideRoot, trustedSha256Matches } from "./security.js";
+import { payloadEnvironment } from "./payload-env.js";
 
 const serviceUrl = process.env.EXECUTOR_SERVICE_URL ?? "";
 const token = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
@@ -49,7 +50,7 @@ if (!manifest.mcp_args.length || path.normalize(manifest.mcp_args[0]) !== path.n
 const child = spawn(nodeExe, manifest.mcp_args, {
   cwd: installRoot,
   stdio: ["pipe", "pipe", "inherit"],
-  env: { ...process.env, DC_REMOTE_DEVICE: "true" },
+  env: payloadEnvironment(process.env),
   windowsHide: true
 });
 
