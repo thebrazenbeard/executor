@@ -143,6 +143,8 @@ To create a laptop enrollment command at the same time:
 
 Default direct TLS port: **9443/TCP**.
 
+The direct runtime automatically bootstraps OpenAI `tunnel-client` when it is not already on PATH. It resolves the latest public `openai/tunnel-client` Windows release, verifies the ZIP against the release `SHA256SUMS.txt`, caches the verified executable under `%LOCALAPPDATA%\Executor\tools`, and then runs the normal tunnel doctor/readiness checks. An explicitly supplied `-TunnelClient` binary still overrides that automatic path.
+
 The direct runtime uses Caddy locally as a TLS terminator. It obtains Caddy from the official GitHub release, verifies the release archive against the official SHA-512 checksum list, persists the internal CA under `%LOCALAPPDATA%\Executor\caddy\data`, and sets `skip_install_trust` so no host-wide certificate trust is required.
 
 The generated enrollment command carries the **public CA certificate** and the per-device credential. The Windows installer stores the CA separately in `device-ca.crt`, stores the device token with DPAPI, and configures the Executor agent to use that CA for WSS verification. The Caddy CA private key stays only on the control-plane machine.

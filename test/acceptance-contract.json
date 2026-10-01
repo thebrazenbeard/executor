@@ -129,6 +129,11 @@
       "id": "EXE-24",
       "requirement": "Direct runtime attempts Windows Firewall and UPnP TCP mapping but never falls back to a relay; router reachability and CGNAT status remain deployment evidence.",
       "automated": true
+    },
+    {
+      "id": "EXE-25",
+      "requirement": "When OpenAI tunnel-client is not already available, the Windows control-plane runtime can install the current official openai/tunnel-client release, verify its archive against the published SHA256SUMS.txt, cache the verified executable, and use it without requiring a preinstalled tunnel client.",
+      "automated": true
     }
   ]
 }

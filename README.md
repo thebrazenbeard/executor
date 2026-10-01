@@ -129,6 +129,7 @@ On the control-plane Windows machine:
 The command:
 
 - starts the zero-device-capable Executor control plane and OpenAI Secure MCP Tunnel;
+- automatically downloads the current official OpenAI `tunnel-client` Windows release when it is not already available, verifies the archive against OpenAI's published `SHA256SUMS.txt`, and caches the verified binary locally;
 - resolves the public IPv4 address unless `-PublicHost` is supplied;
 - downloads Caddy from its official GitHub release only when needed and verifies the release archive against the official SHA-512 checksum file;
 - keeps Caddy's CA under Executor's persistent runtime directory and does not install that CA into the host-wide trust store;
