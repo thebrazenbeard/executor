@@ -31,3 +31,10 @@ Executor has no bounded mode. Security controls protect who may reach the workst
 ## Health disclosure
 
 Unauthenticated `/health` is intentionally usable as a readiness probe and exposes only aggregate service/capacity state. Connected workstation identities are included only when the request carries the configured Executor client bearer.
+
+
+## Payload environment boundary
+
+Full command authority does not require handing transport credentials to the workstation payload. Before launching the pinned Desktop Commander process, Executor preserves ordinary workstation environment variables but removes all `EXECUTOR_*` values, tunnel/control-plane credentials, injected MCP headers, and process-loader injection variables such as `NODE_OPTIONS`, `NODE_PATH`, `LD_PRELOAD`, and `DYLD_INSERT_LIBRARIES`.
+
+This is credential and payload-integrity isolation, not bounded execution. Once authorized, Desktop Commander retains arbitrary command/process/filesystem semantics; those commands simply do not inherit Executor's own control-plane secrets.
