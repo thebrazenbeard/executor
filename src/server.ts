@@ -1,6 +1,6 @@
 import http from "node:http";
 import { WebSocketServer } from "ws";
-import { bearerAuthorized, tokenAuthorized } from "./auth.js";
+import { bearerAuthorized, deviceTokenAuthorized, parseDeviceTokens } from "./auth.js";
 import { DeviceConnection, DeviceEffectError, DeviceRegistry } from "./device-registry.js";
 import { WorkContextOrchestrator } from "./orchestrator.js";
 import type { DeviceHello, DeviceResponse, JsonRpc } from "./protocol.js";
@@ -16,12 +16,14 @@ import { augmentToolsList, executorListDevicesTool, extractDeviceId, stripDevice
 const { port, host } = serverBindConfig();
 const clientToken = process.env.EXECUTOR_CLIENT_TOKEN ?? "";
 const deviceToken = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
+const deviceTokens = parseDeviceTokens(process.env.EXECUTOR_DEVICE_TOKENS_JSON);
 const defaultDevice = process.env.EXECUTOR_DEFAULT_DEVICE ?? "";
 const capacity = capacityConfig();
 const qualification = qualificationStatus(capacity);
 const allowedOrigins = (process.env.EXECUTOR_ALLOWED_ORIGINS ?? "").split(",").map(v => v.trim()).filter(Boolean);
 
-if (!clientToken || !deviceToken) throw new Error("EXECUTOR_CLIENT_TOKEN and EXECUTOR_DEVICE_TOKEN are required");
+if (!clientToken) throw new Error("EXECUTOR_CLIENT_TOKEN is required");
+if (!deviceToken && deviceTokens.size === 0) throw new Error("EXECUTOR_DEVICE_TOKEN or EXECUTOR_DEVICE_TOKENS_JSON is required");
 
 const registry = new DeviceRegistry();
 const eventStore = process.env.EXECUTOR_EXECUTION_EVENT_FILE ? new JsonlExecutionEventStore(process.env.EXECUTOR_EXECUTION_EVENT_FILE) : undefined;
@@ -243,7 +245,7 @@ wss.on("connection", ws => {
       const hello = message as Partial<DeviceHello>;
       if (hello.type !== "hello" || typeof hello.deviceId !== "string" || typeof hello.token !== "string") return ws.close(4003, "hello required");
       if (hello.deviceId.length < 1 || hello.deviceId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(hello.deviceId)) return ws.close(4003, "invalid device id");
-      if (!tokenAuthorized(hello.token, deviceToken)) return ws.close(4004, "unauthorized");
+      if (!deviceTokenAuthorized(hello.deviceId, hello.token, deviceToken, deviceTokens)) return ws.close(4004, "unauthorized");
       clearTimeout(helloTimer);
       const initializeResult = hello.initializeResult && typeof hello.initializeResult === "object" && !Array.isArray(hello.initializeResult)
         ? hello.initializeResult
