@@ -10,6 +10,7 @@ Set-StrictMode -Version Latest
 $SourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $LogRoot = Join-Path $RuntimeRoot "logs"
 $StatePath = Join-Path $RuntimeRoot "runtime-state.json"
+$TunnelHealthUrlFile = Join-Path $RuntimeRoot "tunnel-health-url.txt"
 
 New-Item -ItemType Directory -Force -Path $RuntimeRoot,$LogRoot | Out-Null
 
@@ -81,6 +82,7 @@ $originalServiceUrl = [Environment]::GetEnvironmentVariable("EXECUTOR_SERVICE_UR
 $originalControlTunnel = [Environment]::GetEnvironmentVariable("CONTROL_PLANE_TUNNEL_ID")
 $originalControlKey = [Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY")
 $originalExtraHeaders = [Environment]::GetEnvironmentVariable("MCP_EXTRA_HEADERS")
+$originalHealthUrlFile = [Environment]::GetEnvironmentVariable("HEALTH_URL_FILE")
 
 $server = $null
 $device = $null
@@ -111,6 +113,8 @@ try {
   $env:CONTROL_PLANE_TUNNEL_ID = $tunnelId
   $env:CONTROL_PLANE_API_KEY = $tunnelSecret
   $env:MCP_EXTRA_HEADERS = "Authorization: Bearer $clientToken"
+  $env:HEALTH_URL_FILE = $TunnelHealthUrlFile
+  Remove-Item -LiteralPath $TunnelHealthUrlFile -Force -ErrorAction SilentlyContinue
 
   & $tunnelExe doctor --profile-file $ProfilePath --explain
   if ($LASTEXITCODE -ne 0) { throw "tunnel-client doctor failed" }
@@ -121,9 +125,19 @@ try {
   $tunnel = Start-Process -FilePath $tunnelExe -ArgumentList @("run","--profile-file",$ProfilePath) -PassThru -WindowStyle Hidden -RedirectStandardOutput $tunnelOut -RedirectStandardError $tunnelErr
 
   Wait-Until {
+    Test-Path -LiteralPath $TunnelHealthUrlFile -PathType Leaf
+  } 20 "tunnel-client did not publish its health URL"
+
+  $healthBase = (Get-Content -Raw -LiteralPath $TunnelHealthUrlFile).Trim()
+  Wait-Until {
+    $ready = Invoke-WebRequest -UseBasicParsing -Uri ($healthBase.TrimEnd("/") + "/readyz") -TimeoutSec 2
+    return ($ready.StatusCode -eq 200)
+  } 60 "tunnel-client did not become ready"
+
+  Wait-Until {
     if (-not (Test-Path -LiteralPath $tunnelErr -PathType Leaf)) { return $false }
     return [bool](Select-String -LiteralPath $tunnelErr -SimpleMatch "mcp session initialized" -Quiet)
-  } 60 "tunnel-client started but did not initialize the Executor MCP session"
+  } 60 "tunnel-client became ready but did not record Executor MCP session initialization"
 
   $health = Invoke-RestMethod -Uri ("http://127.0.0.1:" + $env:PORT + "/health") -Method Get -TimeoutSec 2
   if ([int]$health.executionCapacityPerDevice -ne 8 -or [int]$health.upstreamContextCapacity -ne 64) {
@@ -137,6 +151,7 @@ try {
     tunnel_pid = $tunnel.Id
     device_id = $deviceId
     local_mcp = "http://127.0.0.1:$($env:PORT)/mcp"
+    tunnel_health_url = $healthBase
     execution_lanes = 8
     logic_lanes = 64
     mcp_session_verified = $true
@@ -164,6 +179,7 @@ finally {
   $env:CONTROL_PLANE_TUNNEL_ID = $originalControlTunnel
   $env:CONTROL_PLANE_API_KEY = $originalControlKey
   $env:MCP_EXTRA_HEADERS = $originalExtraHeaders
+  $env:HEALTH_URL_FILE = $originalHealthUrlFile
   $clientToken = $null
   $agentToken = $null
   $tunnelSecret = $null
