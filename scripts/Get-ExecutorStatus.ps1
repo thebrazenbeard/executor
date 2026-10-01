@@ -47,8 +47,17 @@ try {
 }
 catch {}
 
+$tunnelReady = $false
+if ($state.PSObject.Properties.Name -contains "tunnel_health_url") {
+  try {
+    $ready = Invoke-WebRequest -UseBasicParsing -Uri (([string]$state.tunnel_health_url).TrimEnd("/") + "/readyz") -TimeoutSec 2
+    $tunnelReady = ($ready.StatusCode -eq 200)
+  }
+  catch {}
+}
+
 [pscustomobject]@{
-  running = ($server.alive -and $server.identity_match -and $device.alive -and $device.identity_match -and $tunnel.alive -and $tunnel.identity_match -and $healthOk)
+  running = ($server.alive -and $server.identity_match -and $device.alive -and $device.identity_match -and $tunnel.alive -and $tunnel.identity_match -and $healthOk -and $tunnelReady)
   state_present = $true
   state_path = $StatePath
   device_id = $state.device_id
@@ -57,6 +66,8 @@ catch {}
   tunnel = $tunnel
   health_ok = $healthOk
   health = $health
+  tunnel_ready = $tunnelReady
+  tunnel_health_url = if ($state.PSObject.Properties.Name -contains "tunnel_health_url") { $state.tunnel_health_url } else { $null }
   mcp_session_verified = [bool]$state.mcp_session_verified
   started_utc = $state.started_utc
 } | ConvertTo-Json -Depth 8
