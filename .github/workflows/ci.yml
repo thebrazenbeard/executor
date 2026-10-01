@@ -46,6 +46,10 @@ jobs:
             }
           }
           if ($failed) { exit 1 }
+      - name: Qualify direct Caddy TLS and WSS device ingress
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\scripts\qualify-direct-ingress.ps1
       - name: Qualify real full Desktop Commander payload at 8/64
         if: runner.os == 'Windows'
         shell: powershell

@@ -64,3 +64,14 @@ test("direct reachability tool exists and does not invoke a relay service", asyn
   assert.match(probe, /\/health/);
   assert.equal(/cloudflare|tailscale|ngrok/i.test(probe), false);
 });
+
+test("Windows CI exercises a real Caddy TLS + WSS device route", async () => {
+  const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+  const qualifier = await readFile("scripts/qualify-direct-ingress.ps1", "utf8");
+  const probe = await readFile("scripts/qualify-direct-ingress.mjs", "utf8");
+  assert.match(workflow, /qualify-direct-ingress\.ps1/);
+  assert.match(qualifier, /Install-ExecutorCaddy\.ps1/);
+  assert.match(qualifier, /tls\s+internal/i);
+  assert.match(probe, /new WebSocket/);
+  assert.match(probe, /deviceHello/);
+});
