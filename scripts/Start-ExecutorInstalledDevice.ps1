@@ -33,6 +33,9 @@ $env:EXECUTOR_TRUSTED_MANIFEST_SHA256 = [string]$config.manifest_sha256
 if ($config.PSObject.Properties.Name -contains "ca_path" -and -not [string]::IsNullOrWhiteSpace([string]$config.ca_path)) {
   $env:EXECUTOR_DEVICE_CA_FILE = [string]$config.ca_path
 }
+if ($config.PSObject.Properties.Name -contains "tls_server_name" -and -not [string]::IsNullOrWhiteSpace([string]$config.tls_server_name)) {
+  $env:EXECUTOR_DEVICE_TLS_SERVER_NAME = [string]$config.tls_server_name
+}
 
 $node = (Get-Command node -ErrorAction Stop).Source
 $agent = Join-Path ([string]$config.agent_root) "dist\device-agent.js"
@@ -46,5 +49,6 @@ try {
 finally {
   $env:EXECUTOR_DEVICE_TOKEN = $null
   $env:EXECUTOR_DEVICE_CA_FILE = $null
+  $env:EXECUTOR_DEVICE_TLS_SERVER_NAME = $null
   $token = $null
 }
