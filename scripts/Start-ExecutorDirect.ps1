@@ -207,7 +207,7 @@ $siteAddresses {
 
   $curl = (Get-Command curl.exe -ErrorAction Stop).Source
   $resolve = ("{0}:{1}:127.0.0.1" -f $PublicHost,$PublicPort)
-  $body = & $curl --silent --show-error --fail --cacert $rootCa --resolve $resolve ($publicUrl + "/health")
+  $body = & $curl --silent --show-error --fail --ssl-revoke-best-effort --cacert $rootCa --resolve $resolve ($publicUrl + "/health")
   if ($LASTEXITCODE -ne 0) { throw "local TLS probe failed" }
   $health = $body | ConvertFrom-Json
   if ($health.role -ne "device-ingress") { throw "route mismatch" }
@@ -257,6 +257,13 @@ $siteAddresses {
 }
 catch {
   if ($caddy) { try { Stop-RecordedProcess $caddy.Id "caddy" } catch {} }
+  if ($upnpCreated) {
+    try {
+      $mappings = (New-Object -ComObject HNetCfg.NATUPnP).StaticPortMappingCollection
+      if ($mappings) { $mappings.Remove($PublicPort,"TCP") }
+    }
+    catch {}
+  }
   try { & (Join-Path $PSScriptRoot "Stop-ExecutorControlPlane.ps1") -RuntimeRoot $RuntimeRoot } catch {}
   if ($firewallCreated) { Remove-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue }
   throw
