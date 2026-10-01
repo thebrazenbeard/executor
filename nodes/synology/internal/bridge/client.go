@@ -23,6 +23,7 @@ type ClientConfig struct {
 	NodeVersion   string
 	ReconnectMin  time.Duration
 	ReconnectMax  time.Duration
+	OnReady       func(int)
 }
 
 type Client struct {
@@ -30,6 +31,8 @@ type Client struct {
 	deviceURL  string
 	generation atomic.Int64
 	dialer     *websocket.Dialer
+	connMu     sync.Mutex
+	conn       *websocket.Conn
 }
 
 func NewClient(cfg ClientConfig) (*Client, error) {
@@ -64,6 +67,23 @@ func (c *Client) Generation() int {
 	return int(c.generation.Load())
 }
 
+func (c *Client) RequestReconnect() {
+	c.connMu.Lock()
+	conn:=c.conn
+	c.connMu.Unlock()
+	if conn!=nil { _ = conn.Close() }
+}
+
+func (c *Client) setConnection(conn *websocket.Conn) {
+	c.connMu.Lock(); c.conn=conn; c.connMu.Unlock()
+}
+
+func (c *Client) clearConnection(conn *websocket.Conn) {
+	c.connMu.Lock()
+	if c.conn==conn { c.conn=nil }
+	c.connMu.Unlock()
+}
+
 func (c *Client) Run(ctx context.Context, handler *node.Handler) error {
 	delay := c.cfg.ReconnectMin
 	for {
@@ -89,7 +109,8 @@ func (c *Client) runOnce(ctx context.Context, handler *node.Handler) error {
 	conn, response, err := c.dialer.DialContext(ctx, c.deviceURL, http.Header{})
 	if response != nil && response.Body != nil { _ = response.Body.Close() }
 	if err != nil { return fmt.Errorf("connect Executor device ingress: %w", err) }
-	defer conn.Close()
+	c.setConnection(conn)
+	defer func(){ c.clearConnection(conn); _ = conn.Close() }()
 
 	closeOnCancel := make(chan struct{})
 	go func() {
@@ -133,6 +154,7 @@ func (c *Client) runOnce(ctx context.Context, handler *node.Handler) error {
 			if err := json.Unmarshal(data, &ready); err != nil { continue }
 			if ready.DeviceID == c.cfg.DeviceID && ready.Generation > 0 {
 				c.generation.Store(int64(ready.Generation))
+				if c.cfg.OnReady!=nil { c.cfg.OnReady(ready.Generation) }
 			}
 		case "request":
 			var request protocol.Request
