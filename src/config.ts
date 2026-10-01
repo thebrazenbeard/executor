@@ -28,3 +28,16 @@ export function qualificationStatus(config: CapacityConfig) {
     upstreamContextMeetsFloor: config.upstreamContexts >= QUALIFICATION_UPSTREAM_CONTEXT_FLOOR
   };
 }
+
+
+export type ServerBindConfig = {
+  host: string;
+  port: number;
+};
+
+export function serverBindConfig(env: NodeJS.ProcessEnv = process.env): ServerBindConfig {
+  return {
+    host: env.HOST?.trim() || "127.0.0.1",
+    port: positiveInt("PORT", env.PORT, 8787)
+  };
+}
