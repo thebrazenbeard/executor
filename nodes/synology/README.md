@@ -9,8 +9,8 @@ It connects outbound to Executor's authenticated device ingress as a `synology-s
 - NAS: Synology DS216
 - package architecture: `armada38x`
 - binary: Linux ARMv7, static, CGO disabled
-- DSM minimum: `7.2.2-72806`
-- package: `ExecutorNode-armada38x-0.1.0-0001.spk`
+- DSM minimum: DSM 7.2.2 build 72806 (`INFO` uses Synology's `os_min_ver="7.2-72806"` syntax)
+- package: `ExecutorNode-armada38x-0.1.0-0004.spk`
 - DSM privilege: `run-as: package`
 - device execution capacity: 2 lanes
 - Executor control-plane logic capacity: 64 lanes
@@ -39,7 +39,7 @@ There is no generic root shell, arbitrary root command, raw block-device write, 
 
 ## Install
 
-Download the `ExecutorNode-armada38x-0.1.0-0001.spk` artifact from the Synology CI job.
+Download the `ExecutorNode-armada38x-0.1.0-0004.spk` artifact from the Synology CI job.
 
 In DSM, open **Package Center > Manual Install**, select the SPK, and supply:
 

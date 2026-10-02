@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-ARTIFACT="${1:-$SCRIPT_DIR/build/spk/ExecutorNode-armada38x-0.1.0-0003.spk}"
+ARTIFACT="${1:-$SCRIPT_DIR/build/spk/ExecutorNode-armada38x-0.1.0-0004.spk}"
 PYTHON_BIN="${PYTHON:-python3}"
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || PYTHON_BIN=python
 
@@ -33,7 +33,16 @@ with tempfile.TemporaryDirectory() as tmp:
     tmp_path = pathlib.Path(tmp)
     with tarfile.open(artifact, "r:*") as outer:
         members = outer.getmembers()
-        top = {m.name.lstrip("./").split("/", 1)[0] for m in members if m.name.lstrip("./")}
+        if not members or members[0].name != "INFO":
+            raise AssertionError("SPK must place INFO first")
+        for member in members:
+            if member.name.startswith("./"):
+                raise AssertionError(f"outer SPK member has ./ prefix: {member.name}")
+            if member.uid != 0 or member.gid != 0:
+                raise AssertionError(f"outer SPK member is not root-owned: {member.name} uid={member.uid} gid={member.gid}")
+            if member.pax_headers:
+                raise AssertionError(f"outer SPK member has PAX headers: {member.name} {member.pax_headers}")
+        top = {m.name.split("/", 1)[0] for m in members if m.name}
         missing = required - top
         if missing:
             raise AssertionError(f"SPK missing members: {sorted(missing)}")
@@ -49,7 +58,7 @@ with tempfile.TemporaryDirectory() as tmp:
     info = (tmp_path / "INFO").read_text()
     expected_info = {
         "package": "ExecutorNode",
-        "version": "0.1.0-0003",
+        "version": "0.1.0-0004",
         "arch": "armada38x",
         "os_min_ver": "7.2-72806",
         "maintainer": "thebrazenbeard",
@@ -95,10 +104,18 @@ with tempfile.TemporaryDirectory() as tmp:
         raise AssertionError("install_uifile does not contain compiled render function")
 
     package_tgz = tmp_path / "package.tgz"
-    with tarfile.open(package_tgz, "r:gz") as inner:
+    with tarfile.open(package_tgz, "r:*") as inner:
+        inner_members = inner.getmembers()
+        for member in inner_members:
+            if member.name.startswith("./"):
+                raise AssertionError(f"package.tgz member has ./ prefix: {member.name}")
+            if member.uid != 0 or member.gid != 0:
+                raise AssertionError(f"package.tgz member is not root-owned: {member.name} uid={member.uid} gid={member.gid}")
+            if member.pax_headers:
+                raise AssertionError(f"package.tgz member has PAX headers: {member.name} {member.pax_headers}")
         binary_member = None
-        for member in inner.getmembers():
-            if member.name.lstrip("./") == "bin/executor-node":
+        for member in inner_members:
+            if member.name == "bin/executor-node":
                 binary_member = member
                 break
         if binary_member is None:

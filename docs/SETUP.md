@@ -67,7 +67,7 @@ For same-machine development, `scripts/Start-ExecutorDevice.ps1` remains availab
 
 ## Install the Synology DS216 storage node
 
-The Synology target is the native `synology-storage` profile, packaged as `ExecutorNode-armada38x-0.1.0-0001.spk` for DSM 7.2.2 or newer. Windows workstation devices retain 8 parallel execution lanes; the DS216 advertises 2 parallel execution lanes; the Executor control plane retains 64 parallel logic lanes.
+The Synology target is the native `synology-storage` profile, packaged as `ExecutorNode-armada38x-0.1.0-0004.spk` for DSM 7.2.2 or newer. Windows workstation devices retain 8 parallel execution lanes; the DS216 advertises 2 parallel execution lanes; the Executor control plane retains 64 parallel logic lanes.
 
 Download the SPK produced by the `synology-node` GitHub Actions job, then open **DSM > Package Center > Manual Install** and select the SPK. The install wizard asks only for:
 

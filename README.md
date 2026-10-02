@@ -107,7 +107,7 @@ The older `Start-ExecutorRuntime.ps1` all-in-one server+local-device+tunnel laun
 
 ## Synology Executor Node
 
-Executor also supports a native `synology-storage` device profile for the Synology DS216. The DSM node is a storage endpoint rather than a Desktop Commander transplant: it is a static ARMv7 Go process packaged as `ExecutorNode-armada38x-0.1.0-0001.spk`.
+Executor also supports a native `synology-storage` device profile for the Synology DS216. The DSM node is a storage endpoint rather than a Desktop Commander transplant: it is a static ARMv7 Go process packaged as `ExecutorNode-armada38x-0.1.0-0004.spk`.
 
 Inside shared-folder roots granted to the package user, ChatGPT/Executor receives full file-content Read/Write authority, including create, replace, append, copy, move, delete, hash, and search operations. Descriptor-relative path handling rejects traversal and symlink escapes. The node may inspect supported DSM state broadly, but a DSM mutation follows `admin.prepare_change` -> exact proposal shown to the user -> explicit user approval -> `admin.apply_change` -> readback verification.
 

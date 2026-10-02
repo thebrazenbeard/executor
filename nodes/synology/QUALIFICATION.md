@@ -23,7 +23,7 @@ Use only a disposable test directory inside a share explicitly granted to the Ex
 
 ## Installation and attachment
 
-1. Download the CI artifact `ExecutorNode-armada38x-0.1.0-0001.spk`.
+1. Download the CI artifact `ExecutorNode-armada38x-0.1.0-0004.spk`.
 2. In DSM Package Center, choose **Manual Install** and install the SPK.
 3. Supply the TLS Executor device-ingress URL, the DS216 device ID, its mapped device credential, and intended share roots.
 4. In **Control Panel > Shared Folder > Edit > Permission > System internal user**, grant the `ExecutorNode` package user **Read/Write** on the chosen test shares.

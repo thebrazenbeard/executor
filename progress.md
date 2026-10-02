@@ -14,7 +14,7 @@ Verification:
 - Restart handoff: 100/100 real local Windows replacement-process cycles PASS (20-cycle test x5), plus startup-failure, ready-failure, connection-timeout, stale-generation, state-drift, concurrent-double-apply, and AfterResponse gating tests PASS.
 - Task 8 local: SPK lifecycle contract PASS; armada38x ARMv7 static SPK build PASS; archive/ELF validator PASS.
 - Task 9 exact head 91fd3daff6a5a4d60bb7f041e6add9f33fccd4ef: Synology CI PASS, Ubuntu Executor CI PASS, Windows real-payload CI PASS.
-- Task 9 artifact: ExecutorNode-armada38x-0.1.0-0001.spk uploaded by GitHub Actions.
+- Task 9 artifact: ExecutorNode-armada38x-0.1.0-0004.spk uploaded by GitHub Actions.
 - Task 10 evidence-boundary scan: NO_UNSUPPORTED_PHYSICAL_CLAIMS.
 - Physical DS216 installation/restart/RSS qualification: pending; procedure is nodes/synology/QUALIFICATION.md.
 
