@@ -105,6 +105,18 @@ The script updates the live credential file and prints a bootstrap PowerShell co
 
 The older `Start-ExecutorRuntime.ps1` all-in-one server+local-device+tunnel launcher remains as a convenience for single-machine development and qualification.
 
+## Synology Executor Node
+
+Executor also supports a native `synology-storage` device profile for the Synology DS216. The DSM node is a storage endpoint rather than a Desktop Commander transplant: it is a static ARMv7 Go process packaged as `ExecutorNode-armada38x-0.1.0-0004.spk`.
+
+Inside shared-folder roots granted to the package user, ChatGPT/Executor receives full file-content Read/Write authority, including create, replace, append, copy, move, delete, hash, and search operations. Descriptor-relative path handling rejects traversal and symlink escapes. The node may inspect supported DSM state broadly, but a DSM mutation follows `admin.prepare_change` -> exact proposal shown to the user -> explicit user approval -> `admin.apply_change` -> readback verification.
+
+Concurrency is device-specific: **Windows workstation devices retain 8 parallel execution lanes; the DS216 `synology-storage` node advertises 2 parallel execution lanes; the Executor control plane retains 64 parallel logic lanes.**
+
+The SPK runs as the DSM package user rather than root. Repository CI can build and validate the `armada38x` artifact, but that does not prove physical installation or operation on a particular DS216; physical-NAS qualification is recorded separately.
+
+See [nodes/synology/README.md](nodes/synology/README.md) for installation and package details.
+
 ## Status
 
 The V1 branch is qualified on Ubuntu and Windows. Windows qualification builds the exact pinned Desktop Commander payload and observed 8 active execution lanes and 64 active logic lanes while processing 64 concurrent calls.

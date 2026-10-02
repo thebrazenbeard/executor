@@ -114,6 +114,41 @@
       "id": "EXE-21",
       "requirement": "Windows device enrollment generates a per-device credential, updates a reloadable server-side credential file without control-plane restart, installs the qualified agent/payload, protects the laptop credential with DPAPI, and never requires tunnel credentials on the laptop.",
       "automated": true
+    },
+    {
+      "id": "EXE-22",
+      "requirement": "A synology-storage device may advertise executionCapacity=2 and armada38x/ARMv7 profile metadata; Executor clamps device capacity to the control-plane ceiling while legacy Windows devices retain the 8-lane default.",
+      "automated": true
+    },
+    {
+      "id": "EXE-23",
+      "requirement": "Synology storage operations provide full file-content read/write authority inside configured DSM roots while rejecting absolute caller paths, traversal, DSM @ internals, symlink escape, and path-swap races through descriptor-relative no-follow operations.",
+      "automated": true
+    },
+    {
+      "id": "EXE-24",
+      "requirement": "Synology DSM state may be inspected through typed read tools; supported DSM mutations use prepare/apply proposals bound to normalized parameters, current state, expiry, and device generation, and the Executor skill requires explicit user approval before apply.",
+      "automated": true
+    },
+    {
+      "id": "EXE-25",
+      "requirement": "ExecutorNode is packaged for DSM 7.2.2+ armada38x as a static Linux ARMv7 SPK with run-as package privilege, required Package Center metadata, lifecycle scripts, and installer wizard.",
+      "automated": true
+    },
+    {
+      "id": "EXE-26",
+      "requirement": "The Synology SPK does not contain tunnel/runtime API secrets or live device credentials; the installed device token is stored separately from non-secret config with package-user-only permissions.",
+      "automated": true
+    },
+    {
+      "id": "EXE-27",
+      "requirement": "CI-built Synology SPK evidence is not treated as proof of physical DS216 installation, runtime memory behavior, share permissions, or live repeated restart success on the NAS.",
+      "automated": false
+    },
+    {
+      "id": "EXE-28",
+      "requirement": "ExecutorNode restart is response-gated and generation-aware: the immediate apply response reports pendingVerification=true and verified=false, startup failure leaves the parent alive, successful handoff starts/releases/shuts down exactly once, connection timeout kills the replacement without killing the parent, post-reconnect checks establish completion, and automated qualification repeats the real replacement-process handoff twenty times.",
+      "automated": true
     }
   ]
 }

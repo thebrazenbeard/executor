@@ -65,6 +65,27 @@ Connected devices are visible from the ChatGPT Executor MCP surface through `lis
 
 For same-machine development, `scripts/Start-ExecutorDevice.ps1` remains available as a direct launcher.
 
+## Install the Synology DS216 storage node
+
+The Synology target is the native `synology-storage` profile, packaged as `ExecutorNode-armada38x-0.1.0-0004.spk` for DSM 7.2.2 or newer. Windows workstation devices retain 8 parallel execution lanes; the DS216 advertises 2 parallel execution lanes; the Executor control plane retains 64 parallel logic lanes.
+
+Download the SPK produced by the `synology-node` GitHub Actions job, then open **DSM > Package Center > Manual Install** and select the SPK. The install wizard asks only for:
+
+- the TLS Executor device-ingress URL;
+- the DS216 device ID;
+- that device's mapped Executor credential; and
+- comma-separated DSM share roots such as `/volume1/media,/volume1/backups`.
+
+The NAS does not receive the OpenAI tunnel ID, tunnel API secret, or Executor client bearer.
+
+After installation, grant storage permissions in **Control Panel > Shared Folder > Edit > Permission > System internal user**. Give the `ExecutorNode` package user **Read/Write** only on the shares you want ChatGPT/Executor to access. Configuring a root in the wizard does not override DSM permissions; each root reports as writable, read-only, or unavailable based on the package user's actual access.
+
+When the package connects, `list_devices` should report the DS216 as `kind: synology-storage`, `packageArch: armada38x`, with an effective capacity of 2 execution lanes. Storage tools have full content authority inside granted roots while rejecting traversal, absolute caller paths, DSM `@...` internals, and symlink escapes.
+
+Supported DSM state can be inspected without a confirmation gate. Any supported DSM mutation uses `admin.prepare_change`; present that exact proposal to the user, obtain explicit approval, then call `admin.apply_change` and verify readback/current generation. The SPK does not expose an arbitrary root shell.
+
+CI proves the package structure, ARMv7/static payload, lifecycle scripts, and automated restart/change contracts. It does **not** prove that the SPK has physically installed or run on a specific DS216. Follow `nodes/synology/QUALIFICATION.md` for physical-NAS evidence once the artifact is installed.
+
 ## Start the private tunnel
 
 Provide your tunnel identity, runtime API credential, and Executor client token as runtime environment values, then run:

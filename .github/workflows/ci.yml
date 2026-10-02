@@ -59,16 +59,28 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.25.x"
+          go-version: "1.24.x"
           cache-dependency-path: nodes/synology/go.sum
       - name: Test Synology node
         working-directory: nodes/synology
         run: go test ./...
-      - name: Cross-compile DS216 ARMv7 node
+      - name: Repeat real restart handoff qualification
         working-directory: nodes/synology
-        env:
-          GOOS: linux
-          GOARCH: arm
-          GOARM: "7"
-          CGO_ENABLED: "0"
-        run: go build -o build/executor-node ./cmd/executor-node
+        run: go test ./internal/admin -run TestOSReplacementCoordinatorTwentyRealProcessCycles -count=1 -v
+      - name: Test DSM package lifecycle
+        run: bash nodes/synology/tests/spk_test.sh
+      - name: Build DS216 armada38x SPK
+        run: bash nodes/synology/build-spk.sh
+      - name: Validate DS216 SPK
+        run: bash nodes/synology/validate-spk.sh
+      - name: Inspect ARMv7 payload
+        run: |
+          file nodes/synology/build/spk/payload/bin/executor-node | tee /tmp/executor-node-file.txt
+          grep -E 'ELF 32-bit.*ARM' /tmp/executor-node-file.txt
+          ! grep -q 'dynamically linked' /tmp/executor-node-file.txt
+      - name: Upload ExecutorNode SPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExecutorNode-armada38x-0.1.0-0004.spk
+          path: nodes/synology/build/spk/ExecutorNode-armada38x-0.1.0-0004.spk
+          if-no-files-found: error

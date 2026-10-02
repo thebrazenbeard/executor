@@ -28,7 +28,9 @@ Executor control plane
 
 Secure MCP Tunnel is an outbound-only MCP path between OpenAI and the private MCP listener. It is not used as a generic workstation relay. Remote laptops attach to the independent device-ingress listener, which exposes the authenticated `/device` WebSocket and a minimal health endpoint but does not expose `/mcp`.
 
-The control plane is valid with zero connected workstations. A workstation becomes usable only after its device agent attaches; losing every workstation does not make the ChatGPT-side Executor MCP endpoint disappear.
+The control plane is valid with zero connected devices. A device becomes usable only after its agent attaches; losing every device does not make the ChatGPT-side Executor MCP endpoint disappear.
+
+A Synology DS216 attaches through the same authenticated `/device` protocol as a `synology-storage` profile, but it implements native storage/DSM MCP tools instead of launching Desktop Commander. Windows workstations remain full-authority command/process devices. The DS216 exposes full file-content authority only inside DSM shared-folder roots granted to the ExecutorNode package user, plus broad supported DSM reads and user-verified typed DSM mutations.
 
 Executor has no bounded mode. Authorization answers whether a controller may operate a workstation. Once authorized, Executor does not replace full command/process semantics with executable grants, argument allowlists, or reduced environments.
 
@@ -42,8 +44,9 @@ The Windows enrollment helper generates a cryptographically random per-device to
 
 Executor separates two independent concurrency domains:
 
-- **8 parallel execution lanes per connected device** by default.
-- **64 parallel logic lanes** by default.
+- **Windows workstation devices use 8 parallel execution lanes** by default.
+- **The DS216 `synology-storage` profile advertises 2 parallel execution lanes** so a 2-core/512 MB NAS is not scheduled like a workstation.
+- **The control plane uses 64 parallel logic lanes** by default.
 
 Logic lanes are independently admitted upstream work contexts. Execution lanes are effects actually dispatched to a workstation. Increasing concurrency does not create additional workstation authority.
 

@@ -32,7 +32,7 @@ The DS216 uses a Marvell Armada 385 88F6820, ARMv7, Synology package architectur
 
 DSM 7 requires packages to declare `conf/privilege` and strongly prefers `run-as: package`. Root packages require Synology-specific authorization and are intentionally outside V1.
 
-The SPK SHALL target DSM 7.2.2 or newer with `os_min_ver="7.2.2-72806"`. The design is compatible with DSM 7.2.2-72806 and does not depend on a particular nano-update number.
+The SPK SHALL target DSM 7.2.2 build 72806 or newer. Synology's INFO version syntax is major.minor-build, so the package declares `os_min_ver="7.2-72806"`; DSM displays that build as 7.2.2-72806. The design does not depend on a particular nano-update number.
 
 Authoritative references:
 
@@ -276,7 +276,7 @@ Package identity: `ExecutorNode`
 package="ExecutorNode"
 version="0.1.0-0001"
 arch="armada38x"
-os_min_ver="7.2.2-72806"
+os_min_ver="7.2-72806"
 maintainer="thebrazenbeard"
 description="Executor Synology storage node"
 ```

@@ -8,4 +8,7 @@ test("Executor skill requires explicit user approval between DSM prepare and app
   assert.match(text,/explicit user approval/i);
   assert.match(text,/admin\.apply_change/);
   assert.match(text,/never call[\s\S]{0,200}admin\.apply_change[\s\S]{0,200}approval/i);
+  assert.match(text,/pendingVerification:\s*true/i);
+  assert.match(text,/verified:\s*false/i);
+  assert.match(text,/do not describe the mutation as completed yet/i);
 });

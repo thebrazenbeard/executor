@@ -1,0 +1,86 @@
+#!/bin/sh
+set -e
+
+log_error() {
+  message="$1"
+  if [ -n "${SYNOPKG_TEMP_LOGFILE:-}" ]; then
+    printf '%s\n' "ExecutorNode install failed: $message" > "$SYNOPKG_TEMP_LOGFILE" 2>/dev/null || true
+  fi
+  printf '%s\n' "ExecutorNode install failed: $message" >&2
+}
+
+fail() {
+  log_error "$1"
+  exit 1
+}
+
+PKGNAME="${SYNOPKG_PKGNAME:-ExecutorNode}"
+PKGVAR="${SYNOPKG_PKGVAR:-/var/packages/$PKGNAME/var}"
+PKGHOME="${SYNOPKG_PKGHOME:-/var/packages/$PKGNAME/home}"
+
+[ -n "$PKGVAR" ] || fail "DSM did not provide a package var directory"
+[ -d "$PKGVAR" ] || fail "package var directory does not exist: $PKGVAR"
+[ -w "$PKGVAR" ] || fail "package var directory is not writable"
+
+if [ ! -d "$PKGHOME" ] || [ ! -w "$PKGHOME" ]; then
+  PKGHOME="$PKGVAR"
+fi
+
+CONFIG="$PKGVAR/config.json"
+TOKEN="$PKGHOME/device.token"
+umask 077
+
+if [ "${SYNOPKG_PKG_STATUS:-}" = "UPGRADE" ] && [ -f "$CONFIG" ] && [ -f "$TOKEN" ]; then
+  chmod 600 "$CONFIG" "$TOKEN" 2>/dev/null || true
+  exit 0
+fi
+
+[ -n "${wizard_executor_url:-}" ] || fail "Executor service URL was not provided by the installer"
+[ -n "${wizard_device_id:-}" ] || fail "Device ID was not provided by the installer"
+[ -n "${wizard_device_token:-}" ] || fail "Device token was not provided by the installer"
+[ -n "${wizard_share_roots:-}" ] || fail "At least one DSM shared-folder root is required"
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\r/\\r/g; s/\t/\\t/g'
+}
+
+printf '%s\n' "$wizard_device_token" > "$TOKEN" || fail "could not write device token"
+chmod 600 "$TOKEN" || fail "could not secure device token"
+
+roots_json=""
+root_index=1
+old_ifs="$IFS"
+IFS='
+'
+for root in $(printf '%s\n' "$wizard_share_roots" | tr ',' '\n'); do
+  root="$(printf '%s' "$root" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -n "$root" ] || continue
+  case "$root" in
+    /volume[1-9][0-9]*/@*|/volume[1-9]/@*) fail "DSM internal @ directories cannot be storage roots" ;;
+    /volume[1-9][0-9]*/?*|/volume[1-9]/?*) ;;
+    *) fail "invalid share root: $root" ;;
+  esac
+  escaped_root="$(json_escape "$root")"
+  entry="{\"id\":\"share$root_index\",\"path\":\"$escaped_root\",\"mode\":\"rw\"}"
+  if [ -n "$roots_json" ]; then
+    roots_json="$roots_json,$entry"
+  else
+    roots_json="$entry"
+  fi
+  root_index=$((root_index + 1))
+done
+IFS="$old_ifs"
+
+[ -n "$roots_json" ] || fail "no valid shared-folder roots were provided"
+
+executor_url="$(json_escape "$wizard_executor_url")"
+device_id="$(json_escape "$wizard_device_id")"
+token_path="$(json_escape "$TOKEN")"
+tmp="$CONFIG.tmp.$$"
+
+printf '{\n  "executorUrl": "%s",\n  "deviceId": "%s",\n  "deviceTokenFile": "%s",\n  "roots": [%s]\n}\n' \
+  "$executor_url" "$device_id" "$token_path" "$roots_json" > "$tmp" || fail "could not write temporary config"
+chmod 600 "$tmp" || fail "could not secure config"
+mv -f "$tmp" "$CONFIG" || fail "could not install config"
+
+exit 0

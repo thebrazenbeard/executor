@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Target device is Synology DS216 / `armada38x`, ARMv7, 512 MB RAM.
-- DSM minimum is `7.2.2-72806`; the 7.2.2 minimum is required because the approved installer uses the DSM 7.2.2 WIZARD_UIFILES format.
+- DSM minimum is DSM 7.2.2 build 72806; the INFO field uses Synology's `os_min_ver="7.2-72806"` syntax. The 7.2.2 minimum is required because the approved installer uses the DSM 7.2.2 WIZARD_UIFILES format.
 - Synology binary build is `GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0`.
 - Package identity is `ExecutorNode`; `conf/privilege` defaults to `run-as: package`.
 - Windows/Desktop Commander devices remain full-authority workstation devices and remain backward compatible when they omit Synology profile metadata.
@@ -452,7 +452,7 @@ Commit: `feat: require verified proposals for DSM mutations`
 - `package="ExecutorNode"`
 - `version="0.1.0-0001"`
 - `arch="armada38x"`
-- `os_min_ver="7.2.2-72806"`
+- `os_min_ver="7.2-72806"`
 - `maintainer="thebrazenbeard"`
 - `description="Executor Synology storage node"`
 - `conf/privilege` defaults to `run-as: package`.
@@ -592,7 +592,7 @@ Fields: NAS model, DSM version, package version/hash, Executor server exact head
 
 - [ ] **Step 3: Verify no CI or README claim marks physical qualification complete**
 
-Search: `git grep -n "DS216.*PASS\|physically qualified\|installed successfully" -- . ':!nodes/synology/QUALIFICATION.md'`
+Search: `git grep -n -E 'DS216.*PASS|physically qualified|installed successfully' -- . ':(exclude)nodes/synology/QUALIFICATION.md' ':(exclude)docs/superpowers/plans/2026-10-01-synology-executor-node.md'`
 Expected: no unsupported completion claim.
 
 - [ ] **Step 4: Commit**

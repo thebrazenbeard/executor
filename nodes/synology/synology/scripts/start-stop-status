@@ -1,0 +1,93 @@
+#!/bin/sh
+set -eu
+
+PKGDEST="${SYNOPKG_PKGDEST:?}"
+PKGVAR="${SYNOPKG_PKGVAR:?}"
+BIN="$PKGDEST/bin/executor-node"
+CONFIG="$PKGVAR/config.json"
+PIDFILE="$PKGVAR/executor-node.pid"
+LOGFILE="$PKGVAR/executor-node.log"
+
+read_pid() {
+  [ -f "$PIDFILE" ] || return 1
+  pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+  case "$pid" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  printf '%s' "$pid"
+}
+
+pid_matches_executor() {
+  pid="$1"
+  kill -0 "$pid" 2>/dev/null || return 1
+
+  exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+  if [ "$exe" = "$BIN" ]; then
+    return 0
+  fi
+
+  [ -r "/proc/$pid/cmdline" ] || return 1
+  cat "/proc/$pid/cmdline" 2>/dev/null | tr '\000' '\n' | grep -F -x "$BIN" >/dev/null 2>&1
+}
+
+is_running() {
+  pid="$(read_pid)" || return 1
+  pid_matches_executor "$pid"
+}
+
+case "${1:-}" in
+  prestart|prestop)
+    exit 0
+    ;;
+  start)
+    if is_running; then
+      exit 0
+    fi
+    rm -f "$PIDFILE"
+    [ -x "$BIN" ] || exit 1
+    [ -f "$CONFIG" ] || exit 1
+    umask 077
+    nohup "$BIN" --config "$CONFIG" >>"$LOGFILE" 2>&1 </dev/null &
+    pid=$!
+    printf '%s\n' "$pid" > "$PIDFILE"
+    sleep 0.1
+    if pid_matches_executor "$pid"; then
+      exit 0
+    fi
+    rm -f "$PIDFILE"
+    exit 1
+    ;;
+  stop)
+    pid="$(read_pid 2>/dev/null || true)"
+    if [ -z "$pid" ] || ! pid_matches_executor "$pid"; then
+      rm -f "$PIDFILE"
+      exit 0
+    fi
+
+    if ! pid_matches_executor "$pid"; then
+      rm -f "$PIDFILE"
+      exit 0
+    fi
+    kill "$pid" 2>/dev/null || true
+    attempts=0
+    while pid_matches_executor "$pid"; do
+      attempts=$((attempts + 1))
+      [ "$attempts" -lt 100 ] || exit 1
+      sleep 0.1
+    done
+    rm -f "$PIDFILE"
+    exit 0
+    ;;
+  status)
+    if is_running; then
+      exit 0
+    fi
+    if [ -f "$PIDFILE" ]; then
+      exit 1
+    fi
+    exit 3
+    ;;
+  *)
+    exit 4
+    ;;
+esac
