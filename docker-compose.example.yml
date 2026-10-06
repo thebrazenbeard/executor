@@ -1,0 +1,14 @@
+services:
+  executor:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      EXECUTOR_CLIENT_TOKEN: "${EXECUTOR_CLIENT_TOKEN}"
+      EXECUTOR_DEVICE_TOKEN: "${EXECUTOR_DEVICE_TOKEN}"
+      EXECUTOR_DEFAULT_DEVICE: "${EXECUTOR_DEFAULT_DEVICE:-}"
+      EXECUTOR_EXECUTION_CAPACITY: "${EXECUTOR_EXECUTION_CAPACITY:-8}"
+      EXECUTOR_LOGIC_CAPACITY: "${EXECUTOR_LOGIC_CAPACITY:-64}"
+    restart: unless-stopped

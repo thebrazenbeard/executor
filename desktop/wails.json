@@ -1,0 +1,23 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Executor Desktop",
+  "outputfilename": "executor-desktop-windows-amd64",
+  "frontenddir": "frontend",
+  "frontend:dir": "frontend",
+  "assetdir": "frontend/dist",
+  "frontend:install": "",
+  "frontend:build": "",
+  "wailsjsdir": "frontend/wailsjs",
+  "build:dir": "build",
+  "author": {
+    "name": "Patrick Sims",
+    "email": ""
+  },
+  "info": {
+    "companyName": "Executor",
+    "productName": "Executor Desktop",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright (c) 2026 Patrick Sims. All rights reserved.",
+    "comments": "Executor local control-plane companion"
+  }
+}

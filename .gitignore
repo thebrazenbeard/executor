@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.log
+
+desktop/build/
+desktop/frontend/wailsjs/
+!desktop/frontend/dist/
+!desktop/frontend/dist/**

@@ -1,0 +1,27 @@
+{
+  "name": "@thebrazenbeard/executor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node scripts/run-tests.mjs",
+    "start": "node dist/server.js",
+    "device": "node dist/device-agent.js",
+    "test:unit": "node scripts/run-tests.mjs",
+    "audit": "npm audit --audit-level=high",
+    "qualify:live-tunnel": "node scripts/qualify-live-tunnel.mjs"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@types/node": "24.5.2",
+    "@types/ws": "8.18.1",
+    "typescript": "5.9.2"
+  }
+}
