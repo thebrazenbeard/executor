@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Executor Desktop</title>
+<style>
+:root{font-family:Segoe UI,system-ui,sans-serif;color:#e8edf2;background:#0d1117}
+*{box-sizing:border-box}body{margin:0;padding:24px;min-height:100vh;background:linear-gradient(145deg,#0d1117,#141b24)}
+header{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:22px}
+h1{margin:0;font-size:27px}.sub{color:#8fa2b5;font-size:13px;margin-top:4px}
+.actions{display:flex;align-items:center;gap:10px}.pill{padding:7px 11px;border-radius:999px;background:#2b3440;color:#c4d1dd;font-size:12px}
+.pill.ok{background:#173524;color:#98e9b5}.pill.bad{background:#3b2024;color:#ffb1b8}
+button{border:0;border-radius:8px;padding:10px 14px;font-weight:650;cursor:pointer;background:#3178d4;color:#fff}
+button.secondary{background:#26313e}button:disabled{opacity:.55;cursor:wait}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:12px}
+.card{background:#151c24;border:1px solid #2a3643;border-radius:11px;padding:15px}
+.label{color:#8fa2b5;font-size:12px}.value{font-size:23px;font-weight:750;margin-top:5px}
+section{margin-top:22px}.panel{background:#151c24;border:1px solid #2a3643;border-radius:11px;padding:15px}
+.row{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px solid #26313c}
+.row:last-child{border-bottom:0}.muted{color:#8fa2b5}.error{color:#ffb1b8;white-space:pre-wrap}
+code{color:#9bdcff;word-break:break-all}@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}header{align-items:flex-start;flex-direction:column}body{padding:14px}}
+</style>
+</head>
+<body>
+<header>
+<div><h1>Executor Desktop</h1><div class="sub">Local control-plane health and ChatGPT session recovery</div></div>
+<div class="actions"><span id="state" class="pill">Checking…</span><button id="refresh" class="secondary">Refresh</button><button id="repair">Repair MCP session</button></div>
+</header>
+<div class="grid">
+<div class="card"><div class="label">Connected workstations</div><div id="devices" class="value">—</div></div>
+<div class="card"><div class="label">Execution lanes / device</div><div id="exec" class="value">—</div></div>
+<div class="card"><div class="label">Logic lanes</div><div id="logic" class="value">—</div></div>
+<div class="card"><div class="label">Tunnel</div><div id="tunnel" class="value" style="font-size:16px">—</div></div>
+</div>
+<section class="panel">
+<div class="row"><span class="muted">ChatGPT activation</span><strong id="activation">—</strong></div>
+<div class="row"><span class="muted">MCP session verified</span><strong id="session">—</strong></div>
+<div class="row"><span class="muted">Runtime root</span><code id="root">—</code></div>
+<div class="row"><span class="muted">Logs</span><code id="logs">—</code></div>
+</section>
+<section><div id="error" class="error"></div></section>
+<script>
+const $=id=>document.getElementById(id);
+function yes(v){return v?'Ready':'Not ready'}
+function render(s){
+ $('state').textContent=s.running&&s.chatgpt_ready?'Executor ready':(s.running?'Runtime online':'Runtime offline');
+ $('state').className='pill '+(s.running&&s.chatgpt_ready?'ok':'bad');
+ $('devices').textContent=s.connected_devices??0;
+ $('exec').textContent=s.execution_lanes??'—';
+ $('logic').textContent=s.logic_lanes??'—';
+ $('tunnel').textContent=s.tunnel_ready?'Ready':'Not ready';
+ $('activation').textContent=yes(s.chatgpt_ready);
+ $('session').textContent=yes(s.mcp_session_verified);
+ $('root').textContent=s.runtime_root||'—';
+ $('logs').textContent=s.logs_path||'—';
+ $('error').textContent='';
+}
+async function refresh(){
+ try{render(await window.go.main.App.Status())}
+ catch(e){$('state').textContent='Status unavailable';$('state').className='pill bad';$('error').textContent=String(e)}
+}
+$('refresh').addEventListener('click',refresh);
+$('repair').addEventListener('click',async()=>{
+ const b=$('repair'); b.disabled=true; b.textContent='Repairing…'; $('error').textContent='';
+ try{render(await window.go.main.App.RepairMCPSession())}
+ catch(e){$('error').textContent=String(e)}
+ finally{b.disabled=false;b.textContent='Repair MCP session'}
+});
+refresh();
+setInterval(refresh,5000);
+</script>
+</body>
+</html>

@@ -114,6 +114,29 @@ See [docs/SETUP.md](docs/SETUP.md) for the self-hosted tunnel and workstation se
 Repository qualification does not prove that a particular private tunnel or workstation is currently online. Runtime activation remains separate evidence.
 
 
+## Executor Desktop
+
+Executor now includes a Windows desktop companion under `desktop/`. The companion is an operator console for the existing local Executor runtime; it is not a second workstation agent and it does not replace the ChatGPT plugin.
+
+It shows the local control-plane state, ChatGPT activation state, connected workstation count, and the configured 8 execution / 64 logic lane profile. The **Repair MCP session** action invokes only `Restart-ExecutorControlPlane.ps1`, then refreshes status. That narrow recovery path:
+
+- reuses the existing direct-runtime tunnel profile and credential-file binding;
+- generates a fresh ephemeral MCP bearer token for the restarted session;
+- reuses the installed device credential store and device identity;
+- does not create a new OpenAI tunnel or API key;
+- does not stop/recreate Caddy, Windows Firewall rules, UPnP, or NAT-PMP mappings.
+
+Build it on Windows with Wails v2.14.0:
+
+```powershell
+cd desktop
+go test ./...
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
+& (Join-Path (go env GOPATH) "bin\wails.exe") build -clean -platform windows/amd64 -trimpath -webview2 browser
+```
+
+CI publishes `executor-desktop-windows-amd64.exe` as a workflow artifact. Building the companion does not install or activate it.
+
 ## Zero-cost, no-relay device ingress
 
 Executor's primary remote-device path is direct TLS. There is no Cloudflare/Tailscale/ngrok/VPS relay in the device traffic path and therefore no third-party per-request, in-flight-request, or relay-bandwidth quota.

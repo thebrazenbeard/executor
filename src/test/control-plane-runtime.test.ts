@@ -55,3 +55,21 @@ test("control plane can bootstrap the official OpenAI tunnel-client when it is n
   assert.match(workflow, /Install-ExecutorTunnelClient\.ps1/);
   assert.match(workflow, /help quickstart/i);
 });
+
+test("control-plane restart recovers the existing direct runtime without recreating network edges", async () => {
+  const restart = await readFile("scripts/Restart-ExecutorControlPlane.ps1", "utf8");
+
+  assert.match(restart, /direct-state\.json/i);
+  assert.match(restart, /credential_file/i);
+  assert.match(restart, /tunnel_profile_path/i);
+  assert.match(restart, /local_mcp_port/i);
+  assert.match(restart, /local_device_port/i);
+  assert.match(restart, /device\.json/i);
+  assert.match(restart, /EXECUTOR_DEVICE_TOKENS_FILE/i);
+  assert.match(restart, /EXECUTOR_CLIENT_TOKEN/i);
+  assert.match(restart, /RandomNumberGenerator/i);
+  assert.match(restart, /Stop-ExecutorControlPlane/i);
+  assert.match(restart, /Start-ExecutorControlPlane/i);
+  assert.equal(/Stop-ExecutorDirect|Start-ExecutorDirect|Remove-NetFirewallRule|StaticPortMappingCollection/i.test(restart), false);
+  assert.equal(/Write-(Host|Output).*secret/i.test(restart), false);
+});

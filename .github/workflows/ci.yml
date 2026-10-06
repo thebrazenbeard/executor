@@ -26,8 +26,34 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
+      - uses: actions/setup-go@v5
+        if: runner.os == 'Windows'
+        with:
+          go-version: "1.27.0"
+          cache-dependency-path: desktop/go.sum
       - run: npm install --ignore-scripts
       - run: npm test
+      - name: Test Executor Desktop
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Push-Location desktop
+          go test ./...
+          Pop-Location
+      - name: Build Executor Desktop
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
+          $wails = Join-Path (go env GOPATH) "bin\wails.exe"
+          Push-Location desktop
+          & $wails build -clean -platform windows/amd64 -trimpath -webview2 browser
+          Pop-Location
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: executor-desktop-windows-amd64
+          path: desktop/build/bin/executor-desktop-windows-amd64.exe
       - name: Parse PowerShell operator scripts
         if: runner.os == 'Windows'
         shell: powershell
