@@ -100,9 +100,44 @@ try {
     }
   }
 
-  if ([string]::IsNullOrWhiteSpace($env:EXECUTOR_CLIENT_TOKEN)) {
-    $env:EXECUTOR_CLIENT_TOKEN = New-RandomSecret
+  # A stale-session repair always rotates the ChatGPT-facing MCP bearer token.
+  $env:EXECUTOR_CLIENT_TOKEN = New-RandomSecret
+
+  # Fail closed before touching the live session. Recovery must reuse the
+  # existing runtime and must not depend on first-install side effects.
+  if (-not (Test-Path -LiteralPath $ProfilePath -PathType Leaf)) {
+    throw "existing Executor tunnel profile not found: $ProfilePath"
   }
+  if ([string]::IsNullOrWhiteSpace($env:EXECUTOR_TUNNEL_ID)) {
+    throw "existing EXECUTOR_TUNNEL_ID could not be recovered"
+  }
+  if ([string]::IsNullOrWhiteSpace($env:EXECUTOR_TUNNEL_API_SECRET)) {
+    throw "existing EXECUTOR_TUNNEL_API_SECRET could not be recovered"
+  }
+  if ([string]::IsNullOrWhiteSpace($env:EXECUTOR_DEVICE_TOKENS_FILE) -or
+      -not (Test-Path -LiteralPath $env:EXECUTOR_DEVICE_TOKENS_FILE -PathType Leaf)) {
+    throw "existing Executor device credential store not found"
+  }
+
+  $null = Get-Command node -ErrorAction Stop
+
+  $tunnelCommand = Get-Command $TunnelClient -ErrorAction SilentlyContinue
+  if (-not $tunnelCommand -and ($TunnelClient -eq "tunnel-client" -or $TunnelClient -eq "tunnel-client.exe")) {
+    $installedTunnel = Join-Path $RuntimeRoot "tools\tunnel-client.exe"
+    if (Test-Path -LiteralPath $installedTunnel -PathType Leaf) {
+      $TunnelClient = $installedTunnel
+      $tunnelCommand = Get-Command $TunnelClient -ErrorAction SilentlyContinue
+    }
+  }
+  if (-not $tunnelCommand) {
+    throw "existing tunnel-client not found: $TunnelClient"
+  }
+
+  $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "dist\server.js") -PathType Leaf)) {
+    throw "Executor control-plane build is missing"
+  }
+
   $startArgs = @{
     RuntimeRoot = $RuntimeRoot
     ProfilePath = $ProfilePath

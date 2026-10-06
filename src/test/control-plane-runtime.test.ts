@@ -73,3 +73,30 @@ test("control-plane restart recovers the existing direct runtime without recreat
   assert.equal(/Stop-ExecutorDirect|Start-ExecutorDirect|Remove-NetFirewallRule|StaticPortMappingCollection/i.test(restart), false);
   assert.equal(/Write-(Host|Output).*secret/i.test(restart), false);
 });
+
+test("control-plane restart preflights recovery inputs before stopping the live session", async () => {
+  const restart = await readFile("scripts/Restart-ExecutorControlPlane.ps1", "utf8");
+  const stopAt = restart.indexOf("Stop-ExecutorControlPlane.ps1");
+  assert.ok(stopAt > 0, "restart must contain the narrow stop call");
+
+  for (const marker of [
+    "Test-Path -LiteralPath $ProfilePath -PathType Leaf",
+    "EXECUTOR_TUNNEL_ID",
+    "EXECUTOR_TUNNEL_API_SECRET",
+    "EXECUTOR_DEVICE_TOKENS_FILE",
+    "Get-Command node",
+  ]) {
+    const at = restart.indexOf(marker);
+    assert.ok(at >= 0, `missing preflight marker: ${marker}`);
+    assert.ok(at < stopAt, `${marker} must be validated before stopping the live session`);
+  }
+});
+
+test("control-plane restart always rotates the MCP bearer token", async () => {
+  const restart = await readFile("scripts/Restart-ExecutorControlPlane.ps1", "utf8");
+  assert.match(restart, /\$env:EXECUTOR_CLIENT_TOKEN\s*=\s*New-RandomSecret/);
+  assert.equal(
+    /if\s*\(\[string\]::IsNullOrWhiteSpace\(\$env:EXECUTOR_CLIENT_TOKEN\)\)[\s\S]{0,120}\$env:EXECUTOR_CLIENT_TOKEN\s*=\s*New-RandomSecret/.test(restart),
+    false,
+  );
+});
