@@ -14,7 +14,11 @@ function Read-NextValue([string[]]$Lines,[int]$Index,[string]$Inline) {
   if (-not [string]::IsNullOrWhiteSpace($Inline)) { return $Inline.Trim() }
   for ($i = $Index + 1; $i -lt $Lines.Count; $i++) {
     $candidate = [string]$Lines[$i]
-    if (-not [string]::IsNullOrWhiteSpace($candidate)) { return $candidate.Trim() }
+    if ([string]::IsNullOrWhiteSpace($candidate) -or $candidate.TrimStart().StartsWith("#")) { continue }
+    # A missing scalar must not consume the next YAML key as a credential.
+    # Otherwise a broken profile can pass preflight and stop a healthy session.
+    if ($candidate -match '^\\s*[A-Za-z_][A-Za-z0-9_-]*\\s*:') { return "" }
+    return $candidate.Trim()
   }
   return ""
 }
