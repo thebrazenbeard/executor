@@ -10,33 +10,7 @@ Set-StrictMode -Version Latest
 $StatePath = Join-Path $RuntimeRoot "direct-state.json"
 $DeviceStatePath = Join-Path $RuntimeRoot "device.json"
 
-function Read-NextValue([string[]]$Lines,[int]$Index,[string]$Inline) {
-  if (-not [string]::IsNullOrWhiteSpace($Inline)) { return $Inline.Trim() }
-  for ($i = $Index + 1; $i -lt $Lines.Count; $i++) {
-    $candidate = [string]$Lines[$i]
-    if (-not [string]::IsNullOrWhiteSpace($candidate)) { return $candidate.Trim() }
-  }
-  return ""
-}
-
-function Read-TunnelCredentials([string]$Path) {
-  if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-    return @{ id = ""; secret = "" }
-  }
-  $lines = @(Get-Content -LiteralPath $Path -Encoding UTF8)
-  $id = ""
-  $secret = ""
-  for ($i = 0; $i -lt $lines.Count; $i++) {
-    $line = [string]$lines[$i]
-    if ($line -match '^\s*tunnel[_\s-]*id\s*:\s*(.*)$') {
-      $id = Read-NextValue $lines $i $Matches[1]
-    }
-    elseif ($line -match '^\s*(api[_\s-]*)?secret([_\s-]*key)?\s*:\s*(.*)$') {
-      $secret = Read-NextValue $lines $i $Matches[3]
-    }
-  }
-  return @{ id = $id; secret = $secret }
-}
+. (Join-Path $PSScriptRoot "Read-ExecutorTunnelCredentials.ps1")
 
 function New-RandomSecret {
   $bytes = New-Object byte[] 32

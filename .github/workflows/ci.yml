@@ -72,6 +72,10 @@ jobs:
             }
           }
           if ($failed) { exit 1 }
+      - name: Test tunnel credential parser fixtures
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\scripts\Test-ExecutorTunnelCredentials.ps1
       - name: Qualify official OpenAI tunnel-client bootstrap
         if: runner.os == 'Windows'
         shell: powershell
