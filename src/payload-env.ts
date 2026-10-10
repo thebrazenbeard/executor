@@ -9,7 +9,13 @@ const BLOCKED_PAYLOAD_ENV = new Set([
   "NODE_PATH",
   "LD_PRELOAD",
   "DYLD_INSERT_LIBRARIES",
-  "DYLD_LIBRARY_PATH"
+  "DYLD_LIBRARY_PATH",
+  "PYTHONPATH",
+  "PYTHONHOME",
+  "BASH_ENV",
+  "ENV",
+  "RUBYOPT",
+  "PERL5OPT"
 ]);
 
 export function payloadEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
