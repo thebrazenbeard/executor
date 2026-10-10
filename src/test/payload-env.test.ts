@@ -55,3 +55,22 @@ test("payload environment removes Node preload/injection settings that would wea
   assert.equal("LD_PRELOAD" in env, false);
   assert.equal("DYLD_INSERT_LIBRARIES" in env, false);
 });
+
+
+test("payload environment strips cross-runtime startup injection hooks", () => {
+  const env = payloadEnvironment({
+    PATH: "keep",
+    PYTHONPATH: "/tmp/untrusted",
+    pythonhome: "/tmp/python-root",
+    BASH_ENV: "/tmp/inject.sh",
+    ENV: "/tmp/inject.sh",
+    RUBYOPT: "-r/tmp/inject.rb",
+    PERL5OPT: "-MUntrusted",
+    MY_SAFE_CUSTOM_VAR: "keep-me"
+  });
+  assert.equal(env.PATH, "keep");
+  assert.equal(env.MY_SAFE_CUSTOM_VAR, "keep-me");
+  for (const key of ["PYTHONPATH", "pythonhome", "BASH_ENV", "ENV", "RUBYOPT", "PERL5OPT"]) {
+    assert.equal(key in env, false, key);
+  }
+});
