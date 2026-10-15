@@ -1,0 +1,45 @@
+name: Executor Keeper Windows
+on:
+  pull_request:
+    paths:
+      - 'src/ExecutorKeeper/**'
+      - 'tests/ExecutorKeeper.SmokeTests/**'
+      - 'scripts/Install-ExecutorKeeper.ps1'
+      - '.github/workflows/executor-keeper.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/ExecutorKeeper/**'
+      - 'tests/ExecutorKeeper.SmokeTests/**'
+      - 'scripts/Install-ExecutorKeeper.ps1'
+      - '.github/workflows/executor-keeper.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Standalone local health-state regressions
+        run: dotnet run --project tests/ExecutorKeeper.SmokeTests/ExecutorKeeper.SmokeTests.csproj -c Release
+      - name: Build tray executable with warnings as errors
+        run: dotnet build src/ExecutorKeeper/ExecutorKeeper.csproj -c Release -warnaserror
+      - name: Publish framework-dependent Windows package
+        run: dotnet publish src/ExecutorKeeper/ExecutorKeeper.csproj -c Release --self-contained false -p:PublishSingleFile=false -o artifacts/win-x64
+      - name: Validate per-user installer PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('scripts/Install-ExecutorKeeper.ps1', [ref]$tokens, [ref]$errors) | Out-Null
+          if (@($errors).Count -gt 0) { throw 'Invalid installer PowerShell syntax' }
+          if (-not (Test-Path 'artifacts/win-x64/ExecutorKeeper.exe')) { throw 'Missing executable' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: executor-keeper-win-x64
+          path: artifacts/win-x64/
