@@ -7,9 +7,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node api.js && tsc -p tsconfig.json",
     "test": "npm run build && node scripts/run-tests.mjs",
-    "start": "node dist/server.js",
+    "start": "node api.js && node dist/server.js",
     "device": "node dist/device-agent.js",
     "test:unit": "node scripts/run-tests.mjs",
     "audit": "npm audit --audit-level=high",

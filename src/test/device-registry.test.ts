@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DeviceConnection, DeviceEffectError } from "../device-registry.js";
+import { DeviceConnection, DeviceEffectError, DeviceRegistry } from "../device-registry.js";
 
 class FakeSocket {
   OPEN = 1;
@@ -67,4 +67,42 @@ test("closed socket before send is a known failed disposition", async () => {
   await assert.rejects(device.request({ jsonrpc: "2.0", id: 7, method: "tools/list" }), (error: unknown) =>
     error instanceof DeviceEffectError && error.disposition === "FAILED"
   );
+});
+
+test("separate device IDs retain independent execution queues and do not steal each other's lanes", async () => {
+  const registry = new DeviceRegistry();
+  const socketA = new FakeSocket();
+  const socketB = new FakeSocket();
+  const a = new DeviceConnection("Lappy", socketA as any, 2);
+  const b = new DeviceConnection("VERA-NODE-1", socketB as any, 2);
+  registry.attach(a);
+  registry.attach(b);
+  const jobsA = [1, 2, 3].map(id => a.request({ jsonrpc: "2.0", id, method: "tools/list" }, 5000));
+  const jobsB = [4, 5, 6].map(id => b.request({ jsonrpc: "2.0", id, method: "tools/list" }, 5000));
+  await new Promise(resolve => setTimeout(resolve, 15));
+  assert.equal(socketA.sent.length, 2);
+  assert.equal(socketB.sent.length, 2);
+  assert.equal(a.activeCount, 2);
+  assert.equal(b.activeCount, 2);
+  assert.equal(a.queuedCount, 1);
+  assert.equal(b.queuedCount, 1);
+
+  a.accept({ type: "response", requestId: socketA.sent[0].requestId, payload: { jsonrpc: "2.0", id: 1, result: {} } });
+  await new Promise(resolve => setTimeout(resolve, 15));
+  assert.equal(socketA.sent.length, 3, "Lappy should dispatch independently");
+  assert.equal(socketB.sent.length, 2, "VERA-NODE-1 queue should remain independent");
+  b.accept({ type: "response", requestId: socketB.sent[0].requestId, payload: { jsonrpc: "2.0", id: 4, result: {} } });
+  await new Promise(resolve => setTimeout(resolve, 15));
+  assert.equal(socketB.sent.length, 3);
+  for (const wire of socketA.sent.slice(1)) {
+    a.accept({ type: "response", requestId: wire.requestId, payload: { jsonrpc: "2.0", id: wire.payload.id, result: {} } });
+  }
+  for (const wire of socketB.sent.slice(1)) {
+    b.accept({ type: "response", requestId: wire.requestId, payload: { jsonrpc: "2.0", id: wire.payload.id, result: {} } });
+  }
+  await Promise.all([...jobsA, ...jobsB]);
+  assert.equal(a.activeCount, 0);
+  assert.equal(b.activeCount, 0);
+  assert.equal(a.queuedCount, 0);
+  assert.equal(b.queuedCount, 0);
 });
