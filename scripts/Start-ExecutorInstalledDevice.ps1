@@ -28,8 +28,10 @@ try {
   try { $mutexAcquired = $mutex.WaitOne(0) }
   catch [System.Threading.AbandonedMutexException] { $mutexAcquired = $true }
   if (-not $mutexAcquired) {
-    Write-Host "Executor device agent already running for $($config.device_id)"
-    exit 0
+    # The mutex proves only that another launcher owns the lock in this session.
+    # It does not attest to an authenticated, responsive device connection.
+    [Console]::Error.WriteLine("Executor launcher lock occupied for $($config.device_id); device health and connectivity NOT verified")
+    exit 20
   }
 
 $secure = (Get-Content -Raw -Encoding ASCII -LiteralPath $credentialPath).Trim() | ConvertTo-SecureString
