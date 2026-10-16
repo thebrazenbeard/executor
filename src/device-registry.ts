@@ -79,12 +79,19 @@ export class DeviceConnection {
       }, timeoutMs);
       this.pending.set(requestId, { resolve, reject, timer });
       const wire: DeviceRequest = { type: "request", requestId, payload };
-      this.socket.send(JSON.stringify(wire), err => {
-        if (!err) return;
+      const failSend = (reason: string) => {
+        if (!this.pending.has(requestId)) return;
         clearTimeout(timer);
         this.pending.delete(requestId);
-        reject(new DeviceEffectError(err.message, "OUTCOME_UNKNOWN"));
-      });
+        reject(new DeviceEffectError(reason, "OUTCOME_UNKNOWN"));
+      };
+      try {
+        this.socket.send(JSON.stringify(wire), err => {
+          if (err) failSend(err.message);
+        });
+      } catch (error) {
+        failSend(error instanceof Error ? error.message : "device request send threw");
+      }
     }));
   }
 
