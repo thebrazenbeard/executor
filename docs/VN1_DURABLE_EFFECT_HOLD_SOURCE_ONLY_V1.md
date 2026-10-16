@@ -1,0 +1,22 @@
+# VN1 optional durable effect-hold journal, source-only prototype
+
+**Owner:** VN1, Executor Draft PR #16. **Status:** isolated Node 24 source test; NOT imported by the live Executor server, deployed, merged, switched on, or a recovery qualification. Existing package engine >=20 is not sufficient for `node:sqlite` on all installations. This module requires an independently approved Node >=22.13 runtime target before adoption.
+
+## Motivation and RED
+Existing in-memory `EffectLedger` blocks terminal rewrites and duplicates *while its process lives*. Two sequential independent Node processes can recreate the same effect ID under a later gateway generation after the first process held `OUTCOME_UNKNOWN`. This is a no-live-gateway source RED; not an actual duplicated external effect. A websocket `socket.send` callback is not a device application receipt, much less the already-persisted Pre-Active run/readback reported in VeraOS PR32.
+
+## Testable fix candidate
+`DurableEffectHoldJournal` persists a strict effect ID, node/device ID, gateway generation, `connectedAt`, task digest, and state through SQLite with WAL, `synchronous=FULL`, strict schema and primary-key uniqueness. It writes `DISPATCHED` intent *before* any external dispatch, making a crash after intent conservative/unknown. Reopen finds the same ID, refuses a new create regardless of newer generation, refuses stale CAS and changes a recovered `DISPATCHED` to held `OUTCOME_UNKNOWN` only on explicit reconciliation. A corrupted database fails closed. No network API, replay, service, timer, completion promotion, auth or remote command exists in this module.
+
+## Deliberate limits / strongest remaining negatives
+- **It is not integrated into `EffectLedger` or the Executor gateway.** Tests only create disposable databases. No production effect-state semantics changed by this source module.
+- Only the database transaction is durable; caller must bind the exact task journal head and receiver-admitted effect intent atomically before any real dispatch. This implementation does not provide cross-system atomicity or an externally verifiable application receipt.
+- `taskDigest` is a string validated for SHA-256 shape; the journal does not hash/qualify actual task bytes or authenticate the caller. `connectedAt` is provided by the caller, not a trusted session attestation here.
+- Node built-in SQLite requires a compatible runtime, a reviewed database location/permissions, and interruption/power-loss tests for its host filesystem. Full WAL synchronization cannot establish no replay if the application bypasses the journal.
+- Any application completion would require an exact request/effect ID, device generation+session, durable receiving application journal, independently verified receipt and reconciliation policy. This module intentionally **has no `COMPLETED` transition**.
+- VeraOS #32 QEMU guest Pre-Active persisted `COMPLETED` is **reported guest application evidence** for a development task. It is not the Executor transport completion or an authenticated normal-resident cognition grant.
+
+## Qualification
+Four isolated source tests exercise distinct-process reopen, duplicate attempt on later generation, invalid typed inputs, corrupt database close on Windows, and recovery of a dispatched-but-not-yet-reconciled intent. All operations remain outside live server/gateway and no model/guest is started.
+
+**Next owner decision:** PORTAL + Integration to review effect receipt schema and receiver task-head CAS, and PORTAL to decide Node runtime portability; VN1 to add authenticated gateway session binding tests before any integration. Patrick must separately authorize any installed gateway or guest runtime effect.
