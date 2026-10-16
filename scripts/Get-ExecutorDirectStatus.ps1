@@ -5,11 +5,28 @@ Set-StrictMode -Version Latest
 
 $statePath = Join-Path $RuntimeRoot "direct-state.json"
 
-function Get-ProcessState([int]$ProcessId,[string]$CommandNeedle) {
-  if ($ProcessId -le 0) { return @{ alive = $false; identity_match = $false } }
+function Get-ProcessState([int]$ProcessId,[string]$CommandNeedle,[string]$ExpectedName='', [int]$ExpectedListener=0) {
+  if ($ProcessId -le 0) { return @{ alive = $false; identity_match = $false; identity_source = 'NOT_FOUND' } }
   $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
-  if (-not $process) { return @{ alive = $false; identity_match = $false } }
-  return @{ alive = $true; identity_match = ([string]$process.CommandLine -like "*$CommandNeedle*") }
+  if (-not $process) { return @{ alive = $false; identity_match = $false; identity_source = 'NOT_FOUND' } }
+  $line=[string]$process.CommandLine
+  if (-not [string]::IsNullOrWhiteSpace($line)) {
+    # Preserve strict command-line identity when Windows exposes it.
+    return @{ alive = $true; identity_match = ($line -like "*$CommandNeedle*"); identity_source = 'COMMAND_LINE' }
+  }
+  # Interactive scheduled tasks may be denied elevated process command lines.
+  # Limited fallback exists ONLY for Caddy, and requires the recorded PID to
+  # own the actual TLS listener. Separate TLS certificate validation is required
+  # below before this script can report running=true.
+  if ($ExpectedName -ne 'caddy.exe' -or $ExpectedListener -le 0 -or [string]$process.Name -ine $ExpectedName) {
+    return @{ alive = $true; identity_match = $false; identity_source = 'INACCESSIBLE_UNQUALIFIED' }
+  }
+  try {
+    $listeners = @(Get-NetTCPConnection -State Listen -LocalPort $ExpectedListener -ErrorAction Stop |
+      Where-Object { $_.OwningProcess -eq $ProcessId -and $_.LocalAddress -in @('127.0.0.1','::1','::','0.0.0.0') })
+    return @{ alive = $true; identity_match = ($listeners.Count -gt 0); identity_source = 'TLS_SOCKET_OWNER' }
+  }
+  catch { return @{ alive = $true; identity_match = $false; identity_source = 'SOCKET_QUERY_FAILED' } }
 }
 
 if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
@@ -18,7 +35,9 @@ if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
 }
 
 $state = Get-Content -Raw -Encoding UTF8 $statePath | ConvertFrom-Json
-$caddy = Get-ProcessState ([int]$state.caddy_pid) "caddy"
+$tlsUri = [uri]([string]$state.public_device_url)
+if ($tlsUri.DnsSafeHost -ne '127.0.0.1' -or $tlsUri.Scheme -ne 'https') { throw 'Unexpected local Executor TLS endpoint' }
+$caddy = Get-ProcessState ([int]$state.caddy_pid) 'caddy' 'caddy.exe' $tlsUri.Port
 
 $controlPlaneOk = $false
 try {
