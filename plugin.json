@@ -1,0 +1,45 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "executor",
+  "version": "0.1.0",
+  "description": "Operate authorized workstations through Executor and an Executor-pinned Desktop Commander payload.",
+  "author": {
+    "name": "Patrick A. Sims"
+  },
+  "repository": "https://github.com/thebrazenbeard/executor",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": [
+    "mcp",
+    "remote",
+    "workstation",
+    "terminal",
+    "filesystem",
+    "automation",
+    "executor",
+    "desktop-commander"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Executor",
+        "shortDescription": "Self-hosted full workstation control",
+        "longDescription": "Connects ChatGPT and Codex to the Executor remote MCP service, which routes authenticated requests to Executor-pinned Desktop Commander payloads on explicitly selected workstations.",
+        "developerName": "Patrick A. Sims",
+        "category": "Productivity",
+        "capabilities": [
+          "Inspect and edit authorized workstation files",
+          "Search authorized workstation paths",
+          "Run and interact with workstation processes",
+          "Inspect and manage workstation processes",
+          "Route work to an explicitly selected connected workstation",
+          "Preserve Executor effect disposition and connection-generation safety"
+        ],
+        "defaultPrompt": [
+          "Use Executor to inspect the connected workstation and continue the active work.",
+          "Run the requested command through Executor and verify the observed result.",
+          "Use Executor for full workstation effects and verify mutations by readback."
+        ]
+      }
+    }
+  }
+}

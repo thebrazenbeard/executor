@@ -1,0 +1,20 @@
+# Manual equivalent of Start-ExecutorDirect.ps1.
+# Replace the TEST-NET address below with the actually reachable public IPv4.
+# Keep Executor's MCP listener private on 127.0.0.1:8787.
+
+{
+  admin off
+  skip_install_trust
+  auto_https disable_redirects
+}
+
+https://203.0.113.10:9443 {
+  tls internal
+
+  @executorDevice path /device /health
+  handle @executorDevice {
+    reverse_proxy 127.0.0.1:8788
+  }
+
+  respond 404
+}

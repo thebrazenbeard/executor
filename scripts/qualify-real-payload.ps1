@@ -1,0 +1,206 @@
+$ErrorActionPreference = "Stop"
+$root = Join-Path $env:RUNNER_TEMP ("executor-real-" + [Guid]::NewGuid().ToString("N"))
+$dc = Join-Path $root "DesktopCommanderMCP"
+$server = $null
+$device = $null
+
+
+function Initialize-ExecutorRipgrepDownloadCache([string]$NodeExecutable) {
+  $packageVersion = "1.17.0"
+  $releaseVersion = "v15.0.0"
+  $arch = (& $NodeExecutable -p "process.arch").Trim()
+
+  switch ($arch) {
+    "x64" {
+      $target = "x86_64-pc-windows-msvc"
+      $expectedSha256 = "5b7f6a3020739ac4bdf2c32300f14388456361bea054d35270a18a3c9949b932"
+    }
+    "arm64" {
+      $target = "aarch64-pc-windows-msvc"
+      $expectedSha256 = "77757a3a8fc99705062e2594d4bbf48aafaee0faca65816455edb0d671bd534e"
+    }
+    "ia32" {
+      $target = "i686-pc-windows-msvc"
+      $expectedSha256 = "4f98e8fcdfc2206b831cb8032f8a1befbb99119a57033c08f244874d52345416"
+    }
+    default {
+      throw "unsupported Node architecture for pinned ripgrep bootstrap: $arch"
+    }
+  }
+
+  $assetName = "ripgrep-$releaseVersion-$target.zip"
+  $cacheDir = Join-Path ([IO.Path]::GetTempPath()) "vscode-ripgrep-cache-$packageVersion"
+  $assetPath = Join-Path $cacheDir $assetName
+
+  if (Test-Path -LiteralPath $assetPath -PathType Leaf) {
+    $cachedSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $assetPath).Hash.ToLowerInvariant()
+    if ($cachedSha256 -eq $expectedSha256) { return }
+    Remove-Item -LiteralPath $assetPath -Force
+  }
+
+  New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+  $downloadPath = "$assetPath.download.$([Guid]::NewGuid().ToString("N"))"
+  $assetUrl = "https://github.com/microsoft/ripgrep-prebuilt/releases/download/$releaseVersion/$assetName"
+
+  try {
+    Invoke-WebRequest -UseBasicParsing -Uri $assetUrl -OutFile $downloadPath
+    $downloadSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $downloadPath).Hash.ToLowerInvariant()
+    if ($downloadSha256 -ne $expectedSha256) {
+      throw "ripgrep bootstrap hash mismatch: expected $expectedSha256 got $downloadSha256"
+    }
+    Move-Item -LiteralPath $downloadPath -Destination $assetPath -Force
+  }
+  finally {
+    if (Test-Path -LiteralPath $downloadPath) {
+      Remove-Item -LiteralPath $downloadPath -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+
+try {
+  git init $dc
+  if ($LASTEXITCODE -ne 0) { throw "git init failed" }
+
+  Push-Location $dc
+  git remote add origin https://github.com/wonderwhy-er/DesktopCommanderMCP.git
+  git fetch --depth 1 origin 550a0b3e31da18b7cf25e87ed840e3d953b6da42
+  if ($LASTEXITCODE -ne 0) { throw "pinned upstream fetch failed" }
+  git checkout --detach FETCH_HEAD
+  if ($LASTEXITCODE -ne 0) { throw "checkout failed" }
+  if ((git rev-parse HEAD).Trim() -ne "550a0b3e31da18b7cf25e87ed840e3d953b6da42") {
+    throw "upstream head mismatch"
+  }
+
+  npm ci --ignore-scripts --no-audit --no-fund
+  if ($LASTEXITCODE -ne 0) { throw "DesktopCommander npm ci failed" }
+  Initialize-ExecutorRipgrepDownloadCache -NodeExecutable (Get-Command node).Source
+
+  npm rebuild "@vscode/ripgrep"
+  if ($LASTEXITCODE -ne 0) { throw "ripgrep rebuild failed" }
+  npm run build
+  if ($LASTEXITCODE -ne 0) { throw "DesktopCommander build failed" }
+  Pop-Location
+
+  $runtime = Join-Path $dc "executor-runtime"
+  New-Item -ItemType Directory -Force $runtime | Out-Null
+  $nodeSource = (Get-Command node).Source
+  Copy-Item $nodeSource (Join-Path $runtime "node.exe")
+
+  $manifest = [ordered]@{
+    schema = "EXECUTOR_DESKTOP_COMMANDER_PAYLOAD_V1"
+    upstream_repository = "https://github.com/wonderwhy-er/DesktopCommanderMCP.git"
+    upstream_commit = "550a0b3e31da18b7cf25e87ed840e3d953b6da42"
+    upstream_version = "0.2.51"
+    node_executable_relative = "executor-runtime/node.exe"
+    node_sha256 = (Get-FileHash -Algorithm SHA256 (Join-Path $runtime "node.exe")).Hash.ToLowerInvariant()
+    entrypoint_relative = "dist/index.js"
+    entrypoint_sha256 = (Get-FileHash -Algorithm SHA256 (Join-Path $dc "dist\index.js")).Hash.ToLowerInvariant()
+    mcp_args = @("dist/index.js", "--no-onboarding")
+    unrestricted_command_string_shell = $true
+  }
+
+  $manifestPath = Join-Path $dc "executor-desktop-commander.manifest.json"
+  $manifest | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $manifestPath
+
+  $env:PORT = "18991"
+  $env:HOST = "127.0.0.1"
+  $env:EXECUTOR_DEVICE_PORT = "18992"
+  $env:EXECUTOR_DEVICE_HOST = "127.0.0.1"
+  $env:EXECUTOR_CLIENT_TOKEN = "qualification-client"
+  $env:EXECUTOR_DEVICE_TOKEN = "qualification-device"
+  $env:EXECUTOR_DEFAULT_DEVICE = "qualification"
+  $env:EXECUTOR_SERVICE_URL = "http://127.0.0.1:18992"
+  $env:EXECUTOR_DEVICE_ID = "qualification"
+  $env:EXECUTOR_EXECUTION_CAPACITY = "8"
+  $env:EXECUTOR_LOGIC_CAPACITY = "64"
+  $env:EXECUTOR_INSTALL_ROOT = $dc
+  $env:EXECUTOR_TRUSTED_MANIFEST_SHA256 = (Get-FileHash -Algorithm SHA256 $manifestPath).Hash.ToLowerInvariant()
+  $env:EXECUTOR_LEAK_SENTINEL = "executor-ci-secret-must-not-reach-payload"
+
+  $server = Start-Process node -ArgumentList "dist/server.js" -PassThru -NoNewWindow
+  $health = $null
+  for ($i=0; $i -lt 40; $i++) {
+    Start-Sleep -Milliseconds 250
+    try { $health = Invoke-RestMethod "http://127.0.0.1:18991/health"; break } catch {}
+  }
+  if (-not $health) { throw "Executor server did not become healthy" }
+
+  $device = Start-Process node -ArgumentList "dist/device-agent.js" -PassThru -NoNewWindow
+  $connected = $false
+  for ($i=0; $i -lt 80; $i++) {
+    Start-Sleep -Milliseconds 250
+    $health = Invoke-RestMethod "http://127.0.0.1:18991/health"
+    if ($health.connectedDeviceCount -eq 1) { $connected = $true; break }
+  }
+  if (-not $connected) { throw "qualified device did not connect" }
+
+  $headers = @{
+    Authorization = "Bearer qualification-client"
+    "x-executor-device" = "qualification"
+  }
+
+  $initBody = @{
+    jsonrpc = "2.0"
+    id = 1
+    method = "initialize"
+    params = @{
+      protocolVersion = "2025-06-18"
+      capabilities = @{}
+      clientInfo = @{ name = "executor-real-qualification"; version = "1.0.0" }
+    }
+  } | ConvertTo-Json -Depth 8
+
+  $init = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:18991/mcp" -Headers $headers -ContentType "application/json" -Body $initBody
+  if (-not $init.result.serverInfo.name) { throw "initialize failed through Executor" }
+
+  $listBody = @{ jsonrpc="2.0"; id=2; method="tools/list"; params=@{} } | ConvertTo-Json -Depth 4
+  $listed = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:18991/mcp" -Headers $headers -ContentType "application/json" -Body $listBody
+  $names = @($listed.result.tools | ForEach-Object { $_.name })
+  if ($names -notcontains "start_process") { throw "Desktop Commander start_process missing through Executor" }
+  if ($names -notcontains "list_devices") { throw "Executor list_devices missing from routed tool surface" }
+
+  $leakMarker = Join-Path $root "payload-env-leaked.txt"
+  $leakMarkerQuoted = $leakMarker.Replace("'", "''")
+  $probeCommand = "powershell -NoProfile -Command `"if (`$env:EXECUTOR_LEAK_SENTINEL) { Set-Content -LiteralPath '$leakMarkerQuoted' -Value 'LEAKED' }; Write-Output EXECUTOR_ENV_ISOLATION_OK`""
+  $probeBody = @{
+    jsonrpc = "2.0"
+    id = 3
+    method = "tools/call"
+    params = @{
+      name = "start_process"
+      arguments = @{
+        command = $probeCommand
+        timeout_ms = 5000
+      }
+    }
+  } | ConvertTo-Json -Depth 8
+
+  $probe = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:18991/mcp" -Headers $headers -ContentType "application/json" -Body $probeBody
+  if ($probe.error) { throw "payload environment isolation probe returned an MCP error" }
+  if (Test-Path -LiteralPath $leakMarker -PathType Leaf) {
+    throw "Executor credential isolation failed: EXECUTOR_* environment reached a Desktop Commander child process"
+  }
+
+  node scripts/qualify-concurrency.mjs
+  if ($LASTEXITCODE -ne 0) { throw "8/64 real-payload concurrency qualification failed" }
+
+  Write-Output (@{
+    status = "PASS"
+    tool_count = $names.Count
+    upstream_commit = "550a0b3e31da18b7cf25e87ed840e3d953b6da42"
+    execution_lanes = 8
+    logic_lanes = 64
+  } | ConvertTo-Json -Compress)
+}
+finally {
+  if ($device -and -not $device.HasExited) {
+    Stop-Process -Id $device.Id -Force -ErrorAction SilentlyContinue
+  }
+  if ($server -and -not $server.HasExited) {
+    Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+  }
+  if (Test-Path $root) {
+    Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
+  }
+}
