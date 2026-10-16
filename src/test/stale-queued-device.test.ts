@@ -112,3 +112,48 @@ test("notification successful send callback before retirement remains completed"
   await assert.doesNotReject(result);
   registry.attach(new DeviceConnection("VERA-NODE-1",new DelayedCloseSocket() as any,1));
 });
+
+test("unresponsive notification send callback cannot occupy execution lane indefinitely", async () => {
+  const registry = new DeviceRegistry();
+  const socket = new DelayedSendSocket();
+  const current = new DeviceConnection("VERA-NODE-1",socket as any,1);
+  registry.attach(current);
+  // 30ms synthetic deadline; no socket callback and no retirement event.
+  const outcome = (current.notify as any)({jsonrpc:"2.0",method:"notifications/initialized"},30);
+  const observed = Promise.allSettled([outcome]);
+  const result = await Promise.race([observed,wait(140).then(()=>null)]);
+  assert.ok(result,"send callback did not return and execution lane was never freed");
+  assert.equal(result[0].status,"rejected");
+  if(result[0].status==="rejected") assert.equal((result[0].reason as any).disposition,"OUTCOME_UNKNOWN");
+  assert.equal(current.activeCount,0);
+});
+
+test("late callback after notification timeout cannot rewrite unknown outcome", async () => {
+  const registry = new DeviceRegistry();
+  const socket = new DelayedSendSocket();
+  const current = new DeviceConnection("VERA-NODE-1",socket as any,1);
+  registry.attach(current);
+  const outcome = current.notify({jsonrpc:"2.0",method:"notifications/initialized"},30);
+  const settled = await Promise.allSettled([outcome]);
+  assert.equal(settled[0].status,"rejected");
+  if (settled[0].status === "rejected")
+    assert.equal((settled[0].reason as any).disposition,"OUTCOME_UNKNOWN");
+  socket.callbacks[0]();
+  await wait(5);
+  assert.equal(current.activeCount,0);
+});
+test("invalid notification deadlines fail without sending", async () => {
+  const registry = new DeviceRegistry();
+  const socket = new DelayedSendSocket();
+  const current = new DeviceConnection("VERA-NODE-1",socket as any,1);
+  registry.attach(current);
+  for (const deadline of [0,-1,NaN,Infinity,true,1.5,600001]) {
+    const settled = await Promise.allSettled([
+      (current.notify as any)({jsonrpc:"2.0",method:"notifications/initialized"},deadline)
+    ]);
+    assert.equal(settled[0].status,"rejected",String(deadline));
+    if (settled[0].status==="rejected")
+      assert.equal((settled[0].reason as any).disposition,"FAILED");
+  }
+  assert.equal(socket.sent.length,0);
+});

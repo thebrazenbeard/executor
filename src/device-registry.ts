@@ -36,23 +36,30 @@ export class DeviceConnection {
     p.resolve(message.payload);
   }
 
-  notify(payload: JsonRpc): Promise<void> {
+  notify(payload: JsonRpc, timeoutMs = 120_000): Promise<void> {
     return this.execution.run(() => new Promise<void>((resolve, reject) => {
-      if (this.retired || this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device session retired or socket not open", "FAILED"));
+      if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000)
+        return reject(new DeviceEffectError("invalid notification send timeout", "FAILED"));
+      if (this.retired || this.socket.readyState !== this.socket.OPEN)
+        return reject(new DeviceEffectError("device session retired or socket not open", "FAILED"));
       let settled = false;
       const rejectUnknown = (reason: string) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
         this.pendingNotifications.delete(rejectUnknown);
         reject(new DeviceEffectError(reason, "OUTCOME_UNKNOWN"));
       };
+      const timer = setTimeout(() => rejectUnknown("device notification send timed out"), timeoutMs);
       this.pendingNotifications.add(rejectUnknown);
       const wire: DeviceRequest = { type: "request", requestId: randomUUID(), payload };
       try {
         this.socket.send(JSON.stringify(wire), err => {
-          if (err || this.retired) return rejectUnknown(err?.message ?? "device session retired during notification send");
+          if (err || this.retired)
+            return rejectUnknown(err?.message ?? "device session retired during notification send");
           if (settled) return;
           settled = true;
+          clearTimeout(timer);
           this.pendingNotifications.delete(rejectUnknown);
           resolve();
         });
