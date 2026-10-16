@@ -117,6 +117,8 @@ if ([string]::IsNullOrWhiteSpace($TlsServerName) -or [Uri]::CheckHostName($TlsSe
 }
 
 if ([string]::IsNullOrWhiteSpace($ProfilePath)) {
+  $upstreamContexts = if ($env:EXECUTOR_UPSTREAM_CONTEXT_CAPACITY) { [int]$env:EXECUTOR_UPSTREAM_CONTEXT_CAPACITY } elseif ($env:EXECUTOR_LOGIC_CAPACITY) { [int]$env:EXECUTOR_LOGIC_CAPACITY } else { 64 }
+  if ($upstreamContexts -lt 1) { throw "Executor upstream context capacity must be positive" }
   @"
 config_version: 1
 mcp:
@@ -124,7 +126,7 @@ mcp:
     - channel: main
       url: http://127.0.0.1:$McpPort/mcp
   startup_wait_timeout: 60s
-  max_concurrent_requests: 64
+  max_concurrent_requests: $upstreamContexts
 health:
   listen_addr: 127.0.0.1:0
 admin_ui:

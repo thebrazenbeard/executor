@@ -135,8 +135,10 @@ try {
   } 60 "tunnel-client became ready but did not record Executor MCP session initialization"
 
   $health = Invoke-RestMethod -Uri ("http://127.0.0.1:" + $env:PORT + "/health") -Method Get -TimeoutSec 2
-  if ([int]$health.executionCapacityPerDevice -ne 8 -or [int]$health.upstreamContextCapacity -ne 64) {
-    throw "Executor control plane did not report the required 8 execution / 64 logic lane profile"
+  $expectedExecution = [int]$env:EXECUTOR_EXECUTION_CAPACITY
+  $expectedLogic = if ($env:EXECUTOR_UPSTREAM_CONTEXT_CAPACITY) { [int]$env:EXECUTOR_UPSTREAM_CONTEXT_CAPACITY } else { [int]$env:EXECUTOR_LOGIC_CAPACITY }
+  if ([int]$health.executionCapacityPerDevice -ne $expectedExecution -or [int]$health.upstreamContextCapacity -ne $expectedLogic) {
+    throw "Executor control plane did not report the configured $expectedExecution execution / $expectedLogic logic lane profile"
   }
 
   [pscustomobject]@{
@@ -146,8 +148,8 @@ try {
     local_mcp = "http://127.0.0.1:$($env:PORT)/mcp"
     local_device_ingress = "http://127.0.0.1:$($env:EXECUTOR_DEVICE_PORT)"
     tunnel_health_url = $healthBase
-    execution_lanes = 8
-    logic_lanes = 64
+    execution_lanes = $expectedExecution
+    logic_lanes = $expectedLogic
     mcp_session_verified = $true
     log_root = $LogRoot
     started_utc = [DateTime]::UtcNow.ToString("o")
@@ -156,7 +158,7 @@ try {
   Write-Host ""
   Write-Host "EXECUTOR CONTROL PLANE READY"
   Write-Host "Connected devices: $($health.connectedDeviceCount)"
-  Write-Host "Parallel lanes: 8 execution per device / 64 logic"
+  Write-Host "Parallel lanes: $expectedExecution execution per device / $expectedLogic logic"
   Write-Host "State: $StatePath"
   Write-Host "Logs: $LogRoot"
 }
