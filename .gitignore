@@ -4,3 +4,15 @@
 *.user
 *.log
 artifacts/
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/
+*.dpapi
+device.json
+direct-state.json
+control-plane-state.json
+*.key
+*.pem
