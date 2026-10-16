@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import WebSocket from "ws";
 import type { DeviceRequest, JsonRpc } from "./protocol.js";
 import { assertSafeDeviceServiceUrl, resolveInsideRoot, trustedSha256Matches } from "./security.js";
 import { payloadEnvironment } from "./payload-env.js";
+import { classifyRegistrationReceipt, parseDeviceServerFrame } from "./registration-proof.js";
 
 const serviceUrl = process.env.EXECUTOR_SERVICE_URL ?? "";
 const token = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
@@ -13,6 +14,8 @@ const deviceId = process.env.EXECUTOR_DEVICE_ID ?? "";
 const trustedManifestHash = process.env.EXECUTOR_TRUSTED_MANIFEST_SHA256 ?? "";
 const deviceCaFile = process.env.EXECUTOR_DEVICE_CA_FILE?.trim() ?? "";
 const tlsServerName = process.env.EXECUTOR_DEVICE_TLS_SERVER_NAME?.trim() ?? "";
+// Opt-in only; the installed agent's behavior is unchanged by this source commit.
+const registrationProbeEnabled = process.env.EXECUTOR_REGISTRATION_PROBE_ENABLED === "1";
 const installRoot = process.env.EXECUTOR_INSTALL_ROOT ?? (process.platform === "win32"
   ? "C:\\ProgramData\\Executor\\DesktopCommanderMCP"
   : "/opt/executor/DesktopCommanderMCP");
@@ -172,6 +175,25 @@ function connect() {
       : {})
   });
   ws = socket;
+  let pendingRegistrationNonce: string | undefined;
+  let registrationDeadline: NodeJS.Timeout | undefined;
+  let registrationInterval: NodeJS.Timeout | undefined;
+  let registrationObserved: { generation: number; connectedAt: number } | undefined;
+  let registrationReady = false;
+  const registrationProbe = () => {
+    if (socket.readyState !== WebSocket.OPEN || pendingRegistrationNonce) return;
+    const nonce = randomBytes(16).toString("hex");
+    pendingRegistrationNonce = nonce;
+    registrationDeadline = setTimeout(() => {
+      console.error(JSON.stringify({ status: "device-registry-proof-timeout" }));
+      if (ws === socket && socket.readyState === WebSocket.OPEN) socket.close(4006, "registry proof timeout");
+    }, 12_000);
+    socket.send(JSON.stringify({ type: "registration-probe", nonce }), error => {
+      if (error && ws === socket && socket.readyState === WebSocket.OPEN) {
+        socket.close(4006, "registry proof send failed");
+      }
+    });
+  };
 
   socket.on("open", () => {
     console.error(JSON.stringify({ status: "device-websocket-open" }));
@@ -185,13 +207,42 @@ function connect() {
   });
 
   socket.on("message", raw => {
-    let message: { type?: string; requestId?: string; payload?: JsonRpc };
-    try { message = JSON.parse(raw.toString()); } catch { socket.close(4002, "invalid json"); return; }
+    const message = parseDeviceServerFrame(raw.toString());
+    if (!message) {
+      socket.close(4002, "invalid device server frame");
+      return;
+    }
     if (message.type === "ready") {
       console.error(JSON.stringify({ status: "device-websocket-ready" }));
+      if (registrationProbeEnabled && !registrationReady) {
+        registrationReady = true;
+        registrationProbe();
+        registrationInterval = setInterval(registrationProbe, 30_000);
+      }
+      return;
+    }
+    if (message.type === "registration-receipt" && registrationProbeEnabled) {
+      const result = classifyRegistrationReceipt(message, pendingRegistrationNonce ?? "", deviceId);
+      if (registrationDeadline) clearTimeout(registrationDeadline);
+      registrationDeadline = undefined;
+      pendingRegistrationNonce = undefined;
+      if (result.status !== "REGISTRY_SESSION_OBSERVED_UNATTESTED" ||
+          (registrationObserved && (result.generation !== registrationObserved.generation ||
+                                    result.connectedAt !== registrationObserved.connectedAt))) {
+        console.error(JSON.stringify({ status: "device-registry-proof-rejected" }));
+        socket.close(4006, "registry proof rejected");
+        return;
+      }
+      registrationObserved = { generation: result.generation, connectedAt: result.connectedAt };
+      console.error(JSON.stringify({ status: "device-registry-session-observed",
+        generation: result.generation, connectedAt: result.connectedAt, effectAuthority: false }));
       return;
     }
     if (message.type !== "request" || typeof message.requestId !== "string" || !message.payload) return;
+    if (registrationProbeEnabled && !registrationObserved) {
+      socket.close(4006, "work requested before fresh registry proof");
+      return;
+    }
     if (message.payload.id === undefined) {
       child.stdin.write(JSON.stringify(message.payload) + LF, error => {
         if (error) console.error(JSON.stringify({ status: "notification-write-failed", requestId: message.requestId, message: error.message }));
@@ -220,6 +271,8 @@ function connect() {
 
   socket.on("error", error => console.error(JSON.stringify({ status: "device-websocket-error", message: error.message })));
   socket.on("close", (code, reason) => {
+    if (registrationInterval) clearInterval(registrationInterval);
+    if (registrationDeadline) clearTimeout(registrationDeadline);
     console.error(JSON.stringify({
       status: "device-websocket-closed",
       code,
