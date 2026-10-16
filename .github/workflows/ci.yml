@@ -46,6 +46,14 @@ jobs:
             }
           }
           if ($failed) { exit 1 }
+      - name: Check scheduled-token process identity fallbacks
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\scripts\tests\Test-ControlStatusFallback.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Control-plane socket fallback regressions failed" }
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\scripts\tests\Test-DirectSocketFallback.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Direct Caddy socket fallback regressions failed" }
       - name: Qualify official OpenAI tunnel-client bootstrap
         if: runner.os == 'Windows'
         shell: powershell
