@@ -57,3 +57,58 @@ test("queued notification is also blocked after replacement even if socket remai
   assert.equal(socket.sent.length,1,"queued old-session notification must not leak");
   assert.equal(results[1].status,"rejected");
 });
+
+class DelayedSendSocket extends DelayedCloseSocket {
+  callbacks: Array<(error?: Error)=>void> = [];
+  override send(raw:string, done?: (error?:Error)=>void) {
+    this.sent.push(JSON.parse(raw));
+    if (done) this.callbacks.push(done);
+  }
+}
+test("notification send callback after session retirement must not report success", async () => {
+  const registry = new DeviceRegistry();
+  const socket = new DelayedSendSocket();
+  const old = new DeviceConnection("VERA-NODE-1",socket as any,1);
+  registry.attach(old);
+  const outcome = old.notify({jsonrpc:"2.0",method:"notifications/initialized"});
+  const observed = Promise.allSettled([outcome]);
+  await wait(5);
+  assert.equal(socket.sent.length,1);
+  assert.equal(socket.callbacks.length,1);
+  registry.attach(new DeviceConnection("VERA-NODE-1",new DelayedCloseSocket() as any,1));
+  assert.equal(socket.readyState,socket.OPEN);
+  socket.callbacks[0]();
+  const settled = await observed;
+  assert.equal(settled[0].status,"rejected","late completion must not report delivered");
+  if (settled[0].status === "rejected") {
+    assert.equal((settled[0].reason as any).disposition,"OUTCOME_UNKNOWN");
+  }
+});
+
+test("retirement settles an in-flight notification without waiting for socket callback", async () => {
+  const registry = new DeviceRegistry();
+  const socket = new DelayedSendSocket();
+  const old = new DeviceConnection("VERA-NODE-1",socket as any,1);
+  registry.attach(old);
+  const result = old.notify({jsonrpc:"2.0",method:"notifications/initialized"});
+  const handled = Promise.allSettled([result]);
+  await wait(5);
+  assert.equal(socket.callbacks.length,1);
+  registry.attach(new DeviceConnection("VERA-NODE-1",new DelayedCloseSocket() as any,1));
+  const settled = await Promise.race([handled,wait(90).then(()=>null)]);
+  assert.ok(settled,"retirement must settle the send even if its callback never arrives");
+  assert.equal(settled[0].status,"rejected");
+  if (settled[0].status === "rejected") assert.equal((settled[0].reason as any).disposition,"OUTCOME_UNKNOWN");
+});
+
+test("notification successful send callback before retirement remains completed", async () => {
+  const registry = new DeviceRegistry();
+  const socket = new DelayedSendSocket();
+  const old = new DeviceConnection("VERA-NODE-1",socket as any,1);
+  registry.attach(old);
+  const result = old.notify({jsonrpc:"2.0",method:"notifications/initialized"});
+  await wait(5);
+  socket.callbacks[0]();
+  await assert.doesNotReject(result);
+  registry.attach(new DeviceConnection("VERA-NODE-1",new DelayedCloseSocket() as any,1));
+});

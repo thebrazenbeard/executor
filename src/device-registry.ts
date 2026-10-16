@@ -16,6 +16,7 @@ type Pending = {
 export class DeviceConnection {
   readonly execution: LanePool;
   private pending = new Map<string, Pending>();
+  private pendingNotifications = new Set<(reason: string) => void>();
   private retired = false;
 
   constructor(
@@ -38,8 +39,26 @@ export class DeviceConnection {
   notify(payload: JsonRpc): Promise<void> {
     return this.execution.run(() => new Promise<void>((resolve, reject) => {
       if (this.retired || this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device session retired or socket not open", "FAILED"));
+      let settled = false;
+      const rejectUnknown = (reason: string) => {
+        if (settled) return;
+        settled = true;
+        this.pendingNotifications.delete(rejectUnknown);
+        reject(new DeviceEffectError(reason, "OUTCOME_UNKNOWN"));
+      };
+      this.pendingNotifications.add(rejectUnknown);
       const wire: DeviceRequest = { type: "request", requestId: randomUUID(), payload };
-      this.socket.send(JSON.stringify(wire), err => err ? reject(new DeviceEffectError(err.message, "OUTCOME_UNKNOWN")) : resolve());
+      try {
+        this.socket.send(JSON.stringify(wire), err => {
+          if (err || this.retired) return rejectUnknown(err?.message ?? "device session retired during notification send");
+          if (settled) return;
+          settled = true;
+          this.pendingNotifications.delete(rejectUnknown);
+          resolve();
+        });
+      } catch (error) {
+        rejectUnknown(error instanceof Error ? error.message : "device notification send threw");
+      }
     }));
   }
 
@@ -67,6 +86,7 @@ export class DeviceConnection {
 
   close(reason = "device disconnected") {
     this.retired = true;
+    for (const rejectUnknown of [...this.pendingNotifications]) rejectUnknown(reason);
     for (const [id, p] of this.pending) {
       clearTimeout(p.timer);
       p.reject(new DeviceEffectError(reason, "OUTCOME_UNKNOWN"));
