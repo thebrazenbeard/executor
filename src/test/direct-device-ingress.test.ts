@@ -1,0 +1,139 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+test("device agent supports an operator-owned CA for direct WSS", async () => {
+  const agent = await readFile("src/device-agent.ts", "utf8");
+  assert.match(agent, /EXECUTOR_DEVICE_CA_FILE/);
+  assert.match(agent, /EXECUTOR_DEVICE_TLS_SERVER_NAME/);
+  assert.match(agent, /WebSocket[\s\S]*ca\s*:/);
+  assert.match(agent, /servername/);
+  assert.match(agent, /headers[\s\S]*Host/);
+});
+
+test("Caddy bootstrap uses official GitHub release assets and SHA-512 verification", async () => {
+  const installer = await readFile("scripts/Install-ExecutorCaddy.ps1", "utf8");
+  assert.equal(/api\.github\.com/i.test(installer), false);
+  assert.match(installer, /github\.com\/caddyserver\/caddy\/releases\/latest/i);
+  assert.match(installer, /url_effective|Location/i);
+  assert.match(installer, /caddyserver\/caddy\/releases/i);
+  assert.match(installer, /SHA512/i);
+  assert.equal(/cloudflare|tailscale|ngrok/i.test(installer), false);
+});
+
+test("direct runtime has no traffic relay and fronts only device ingress", async () => {
+  const start = await readFile("scripts/Start-ExecutorDirect.ps1", "utf8");
+  const status = await readFile("scripts/Get-ExecutorDirectStatus.ps1", "utf8");
+  const stop = await readFile("scripts/Stop-ExecutorDirect.ps1", "utf8");
+  const restart = await readFile("scripts/Restart-ExecutorDirect.ps1", "utf8");
+
+  assert.match(start, /Start-ExecutorControlPlane\.ps1/);
+  assert.match(start, /Install-ExecutorCaddy\.ps1/);
+  assert.match(start, /TlsServerName/i);
+  assert.match(start, /executor-device\.invalid/i);
+  assert.match(start, /tls\s+internal/i);
+  assert.match(start, /skip_install_trust/i);
+  assert.match(start, /reverse_proxy\s+127\.0\.0\.1:/i);
+  assert.match(start, /New-NetFirewallRule/);
+  assert.match(start, /HNetCfg\.NATUPnP/);
+  assert.match(start, /root\.crt/);
+  assert.match(start, /probe-device-ingress\.mjs/i);
+  assert.equal(/ssl-revoke-best-effort|--cacert/i.test(start), false);
+  assert.match(start, /StaticPortMappingCollection[\s\S]*Remove\(/i);
+  assert.match(start, /New-ExecutorDeviceEnrollment\.ps1/);
+  assert.equal(/cloudflare|tailscale|ngrok|tunnel\s+--url/i.test(start), false);
+  assert.equal(/function\s+(NV|SP)\b/i.test(start), false, "direct runtime helper names must not collide with PowerShell aliases");
+
+  const stateBlock = start.match(/\[pscustomobject\]@\{([\s\S]*?)\}\s*\|\s*ConvertTo-Json/i)?.[1] ?? "";
+  assert.ok(stateBlock.length > 0);
+  assert.match(stateBlock, /caddy_pid/);
+  assert.match(stateBlock, /public_device_url/);
+  assert.equal(/API_SECRET|API_KEY|CLIENT_TOKEN|DEVICE_TOKEN/i.test(stateBlock), false);
+
+  assert.match(status, /Win32_Process/);
+  assert.match(stop, /Win32_Process/);
+  assert.match(restart, /Stop-ExecutorDirect/);
+  assert.match(restart, /Start-ExecutorDirect/);
+});
+
+test("enrollment carries a public CA without changing device-token storage", async () => {
+  const enroll = await readFile("scripts/New-ExecutorDeviceEnrollment.ps1", "utf8");
+  const install = await readFile("scripts/Install-ExecutorDevice.ps1", "utf8");
+  const launch = await readFile("scripts/Start-ExecutorInstalledDevice.ps1", "utf8");
+
+  assert.match(enroll, /CaCertificatePath/);
+  assert.match(enroll, /CaCertificateBase64/);
+  assert.match(install, /CaCertificateBase64/);
+  assert.match(install, /device-ca\.crt/);
+  assert.match(install, /ca_path/);
+  assert.match(enroll, /TlsServerName/);
+  assert.match(install, /TlsServerName/);
+  assert.match(install, /tls_server_name/);
+  assert.match(launch, /EXECUTOR_DEVICE_CA_FILE/);
+  assert.match(launch, /EXECUTOR_DEVICE_TLS_SERVER_NAME/);
+  assert.match(install, /device-token\.dpapi/);
+});
+
+test("direct reachability tool exists and does not invoke a relay service", async () => {
+  const probe = await readFile("scripts/Test-ExecutorDirectReachability.ps1", "utf8");
+  assert.match(probe, /CaCertificatePath/);
+  assert.match(probe, /probe-device-ingress\.mjs/i);
+  assert.match(probe, /resolve-to-loopback/i);
+  assert.equal(/ssl-revoke-best-effort|--cacert/i.test(probe), false);
+  assert.equal(/cloudflare|tailscale|ngrok/i.test(probe), false);
+});
+
+test("Windows CI exercises a real Caddy TLS + WSS device route", async () => {
+  const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+  const qualifier = await readFile("scripts/qualify-direct-ingress.ps1", "utf8");
+  const probe = await readFile("scripts/qualify-direct-ingress.mjs", "utf8");
+  assert.match(workflow, /qualify-direct-ingress\.ps1/);
+  assert.match(qualifier, /Install-ExecutorCaddy\.ps1/);
+  assert.match(qualifier, /tls\s+internal/i);
+  assert.match(probe, /new WebSocket/);
+  assert.match(probe, /servername/);
+  assert.match(probe, /Host/);
+  assert.match(probe, /deviceHello/);
+});
+
+
+test("Node direct-ingress probe verifies CA, health role, and optional loopback resolution", async () => {
+  const probe = await readFile("scripts/probe-device-ingress.mjs", "utf8");
+  assert.match(probe, /node:https|from "https"|from 'https'/i);
+  assert.match(probe, /rejectUnauthorized\s*:\s*true/i);
+  assert.match(probe, /checkServerIdentity|hostname|host/i);
+  assert.match(probe, /127\.0\.0\.1/);
+  assert.match(probe, /device-ingress/i);
+  assert.equal(/rejectUnauthorized\s*:\s*false/i.test(probe), false);
+});
+
+
+test("Windows direct qualifier falls back to a normal temp directory outside GitHub Actions", async () => {
+  const qualifier = await readFile("scripts/qualify-direct-ingress.ps1", "utf8");
+  assert.match(qualifier, /RUNNER_TEMP/);
+  assert.match(qualifier, /\$env:TEMP|GetTempPath/i);
+});
+
+
+test("direct runtime validates an existing router mapping before treating it as owned", async () => {
+  const start = await readFile("scripts/Start-ExecutorDirect.ps1", "utf8");
+  assert.match(start, /ExternalPort/i);
+  assert.match(start, /InternalClient/i);
+  assert.match(start, /InternalPort/i);
+  assert.match(start, /Description/i);
+  assert.match(start, /mapping conflict/i);
+});
+
+test("Windows device reinstall terminates the prior installed device process tree before replacing payload", async () => {
+  const install = await readFile("scripts/Install-ExecutorDevice.ps1", "utf8");
+
+  assert.match(install, /function\s+Stop-ExistingInstalledDeviceProcesses/i);
+  assert.match(install, /Get-CimInstance\s+Win32_Process/i);
+  assert.match(install, /Stop-Process\s+-Id/i);
+
+  const definition = install.indexOf("function Stop-ExistingInstalledDeviceProcesses");
+  const cleanupCall = install.indexOf("Stop-ExistingInstalledDeviceProcesses", definition + 1);
+  const payloadInstall = install.indexOf("Install-ExecutorDesktopCommander.ps1");
+  assert.ok(cleanupCall > definition, "installer must invoke the installed-device cleanup helper");
+  assert.ok(cleanupCall < payloadInstall, "old installed-device processes must be stopped before payload replacement");
+});

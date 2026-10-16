@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "status": "IMPLEMENTATION_ACCEPTANCE_TARGET",
+  "source_binding": {
+    "workbridgecommander_head": "c2b95be79ca011a539c20bfee60fcbc46cfea177",
+    "workbridge_head": "e88e14ea25f25abd723bb50909b3e25e67f889fd",
+    "workbridge_mcp_head": "f091f6be6e85f489e3e7839e10612204b89a4a9e",
+    "desktop_commander_head": "550a0b3e31da18b7cf25e87ed840e3d953b6da42",
+    "desktop_commander_version": "0.2.51",
+    "execution_model": "FULL_AUTHORITY_ONLY"
+  },
+  "requirements": [
+    {
+      "id": "EXE-01",
+      "requirement": "Remote ingress rejects unauthenticated MCP requests.",
+      "automated": true
+    },
+    {
+      "id": "EXE-02",
+      "requirement": "Device attachment rejects unauthenticated registration.",
+      "automated": true
+    },
+    {
+      "id": "EXE-03",
+      "requirement": "Executor exposes full Desktop Commander workstation semantics without a bounded executable or argument-grant mode.",
+      "automated": true
+    },
+    {
+      "id": "EXE-04",
+      "requirement": "Default per-device capacity is 8 parallel execution lanes.",
+      "automated": true
+    },
+    {
+      "id": "EXE-05",
+      "requirement": "Default upstream capacity is 64 parallel logic lanes.",
+      "automated": true
+    },
+    {
+      "id": "EXE-06",
+      "requirement": "Tunnel profile allows at least 64 concurrent upstream requests.",
+      "automated": true
+    },
+    {
+      "id": "EXE-07",
+      "requirement": "Connection generation changes on device replacement and stale generations cannot dispatch effects.",
+      "automated": true
+    },
+    {
+      "id": "EXE-08",
+      "requirement": "Post-dispatch timeout or disconnect is classified OUTCOME_UNKNOWN and is never silently replayed.",
+      "automated": true
+    },
+    {
+      "id": "EXE-09",
+      "requirement": "Operator tunnel/API credentials remain external to repository source.",
+      "automated": true
+    },
+    {
+      "id": "EXE-10",
+      "requirement": "Repository source, deployed tunnel, connected device, and observed workstation effect remain separate evidence classes.",
+      "automated": false
+    },
+    {
+      "id": "EXE-11",
+      "requirement": "A device ID with a configured per-device token accepts only that token; a shared fallback token cannot impersonate the mapped device.",
+      "automated": true
+    },
+    {
+      "id": "EXE-12",
+      "requirement": "Windows runtime start/stop/restart/status scripts preserve 8/64 defaults, do not persist runtime credentials, fence recorded PIDs by command-line identity before termination, and require the tunnel client's live /readyz state for a running status.",
+      "automated": true
+    },
+    {
+      "id": "EXE-13",
+      "requirement": "All checked-in PowerShell operator scripts parse successfully on Windows CI.",
+      "automated": true
+    },
+    {
+      "id": "EXE-14",
+      "requirement": "Windows runtime captures the tunnel client's per-run health URL and re-probes /readyz instead of treating a surviving tunnel process as current readiness.",
+      "automated": true
+    },
+    {
+      "id": "EXE-15",
+      "requirement": "Unauthenticated health probes expose aggregate readiness/capacity state but not connected workstation identities; detailed device inventory requires the Executor client bearer.",
+      "automated": true
+    },
+    {
+      "id": "EXE-16",
+      "requirement": "Installer and real-payload qualifier preseed the pinned @vscode/ripgrep release cache via a direct release asset and verify its SHA-256 before rebuild, without importing the WorkBridge bounded process overlay.",
+      "automated": true
+    },
+    {
+      "id": "EXE-17",
+      "requirement": "An explicit operator-run live-tunnel qualifier requires a non-loopback HTTPS remote MCP URL, drives 64 remote MCP calls, and requires observed overlap of at least 8 execution lanes and 64 logic lanes; ordinary CI does not claim this live deployment evidence.",
+      "automated": false
+    },
+    {
+      "id": "EXE-18",
+      "requirement": "The pinned Desktop Commander payload preserves ordinary workstation environment context but does not inherit Executor/tunnel credentials or loader-injection variables; Windows real-payload qualification verifies an EXECUTOR_* sentinel cannot reach a start_process child.",
+      "automated": true
+    },
+    {
+      "id": "EXE-19",
+      "requirement": "Remote workstation attachment uses a separate device-ingress listener that does not expose /mcp; the private MCP listener no longer accepts /device WebSocket attachment.",
+      "automated": true
+    },
+    {
+      "id": "EXE-20",
+      "requirement": "The headless Windows control-plane runtime starts Executor plus tunnel-client with zero connected devices and without requiring a local workstation ID, Desktop Commander install root, or trusted payload manifest.",
+      "automated": true
+    },
+    {
+      "id": "EXE-21",
+      "requirement": "Windows device enrollment generates a per-device credential, updates a reloadable server-side credential file without control-plane restart, installs the qualified agent/payload, protects the laptop credential with DPAPI, and never requires tunnel credentials on the laptop.",
+      "automated": true
+    },
+    {
+      "id": "EXE-22",
+      "requirement": "The zero-cost remote-device path uses direct operator-hosted TLS/WSS with checksum-verified Caddy and no third-party traffic relay; Windows CI proves a real Caddy internal-CA TLS boundary and WSS device hello.",
+      "automated": true
+    },
+    {
+      "id": "EXE-23",
+      "requirement": "Windows enrollment carries the Executor/Caddy public CA separately from the DPAPI-protected per-device token, prefers the exact local Git HEAD, and installed devices can be repointed without changing identity, credential, or CA.",
+      "automated": true
+    },
+    {
+      "id": "EXE-24",
+      "requirement": "Direct runtime attempts Windows Firewall and UPnP TCP mapping but never falls back to a relay; router reachability and CGNAT status remain deployment evidence.",
+      "automated": true
+    },
+    {
+      "id": "EXE-25",
+      "requirement": "When OpenAI tunnel-client is not already available, the Windows control-plane runtime can install the current official openai/tunnel-client release, verify its archive against the published SHA256SUMS.txt, cache the verified executable, and use it without requiring a preinstalled tunnel client.",
+      "automated": true
+    }
+  ]
+}
