@@ -7,12 +7,35 @@ Set-StrictMode -Version Latest
 
 $StatePath = Join-Path $RuntimeRoot "control-plane-state.json"
 
-function Get-RecordedProcessState([int]$ProcessId,[string]$CommandNeedle) {
-  if ($ProcessId -le 0) { return @{ alive = $false; identity_match = $false } }
+function Get-RecordedProcessState([int]$ProcessId,[string]$CommandNeedle,[string]$ExpectedName,[int[]]$ExpectedPorts) {
+  $failed = @{ alive = $false; identity_match = $false; identity_source = 'NOT_FOUND' }
+  if ($ProcessId -le 0) { return $failed }
   $record = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
-  if (-not $record) { return @{ alive = $false; identity_match = $false } }
+  if (-not $record) { return $failed }
   $commandLine = [string]$record.CommandLine
-  return @{ alive = $true; identity_match = ($commandLine -like "*$CommandNeedle*") }
+  if (-not [string]::IsNullOrWhiteSpace($commandLine)) {
+    # When available, preserve the original strict process command identity check.
+    return @{ alive = $true; identity_match = ($commandLine -like "*$CommandNeedle*"); identity_source = 'COMMAND_LINE' }
+  }
+  # Limited Task Scheduler tokens cannot inspect command lines of elevated processes.
+  # Fallback requires matching executable name AND ownership of every expected
+  # local health listener, not merely an open port or a recorded PID.
+  if ([string]$record.Name -ine $ExpectedName -or $ExpectedPorts.Count -eq 0) {
+    return @{ alive = $true; identity_match = $false; identity_source = 'INACCESSIBLE_UNQUALIFIED' }
+  }
+  try {
+    foreach ($port in $ExpectedPorts) {
+      $owned = @(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction Stop |
+        Where-Object { $_.LocalAddress -eq '127.0.0.1' -and $_.OwningProcess -eq $ProcessId })
+      if ($owned.Count -eq 0) {
+        return @{ alive = $true; identity_match = $false; identity_source = 'SOCKET_OWNER_MISMATCH' }
+      }
+    }
+    return @{ alive = $true; identity_match = $true; identity_source = 'LOOPBACK_SOCKET_OWNER' }
+  }
+  catch {
+    return @{ alive = $true; identity_match = $false; identity_source = 'SOCKET_QUERY_FAILED' }
+  }
 }
 
 if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
@@ -25,8 +48,14 @@ if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
 }
 
 $state = Get-Content -Raw -Encoding UTF8 $StatePath | ConvertFrom-Json
-$server = Get-RecordedProcessState ([int]$state.server_pid) "dist/server.js"
-$tunnel = Get-RecordedProcessState ([int]$state.tunnel_pid) "tunnel-client"
+$mcpUri = [uri]([string]$state.local_mcp)
+$ingressUri = [uri]([string]$state.local_device_ingress)
+$tunnelUri = [uri]([string]$state.tunnel_health_url)
+foreach($endpoint in @($mcpUri,$ingressUri,$tunnelUri)) {
+  if ($endpoint.DnsSafeHost -ne '127.0.0.1') { throw 'Expected loopback local Executor status endpoint' }
+}
+$server = Get-RecordedProcessState ([int]$state.server_pid) 'dist/server.js' 'node.exe' @($mcpUri.Port,$ingressUri.Port)
+$tunnel = Get-RecordedProcessState ([int]$state.tunnel_pid) 'tunnel-client' 'tunnel-client.exe' @($tunnelUri.Port)
 
 $mcpHealth = $null
 $mcpHealthOk = $false
