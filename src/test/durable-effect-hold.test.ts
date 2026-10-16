@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -15,7 +15,7 @@ test("SQLite effect ID+generation unknown survives independent process reopen",{
   const db=join(root,"effects.sqlite3");
   const moduleUrl=pathToFileURL(resolve("dist/durable-effect-hold.js")).href;
   const child=`import {DurableEffectHoldJournal} from ${JSON.stringify(moduleUrl)};
-const j=new DurableEffectHoldJournal(process.argv[1]);
+const j=new DurableEffectHoldJournal(process.argv[1],process.argv[2]==="first"?{initializeNew:true}:{});
 const id="vn1:effect:deterministic",digest="${DIGEST}";
 if(process.argv[2]==="first"){
  const x=j.create(id,"VERA-NODE-1",6,1792164975049,digest);
@@ -66,7 +66,7 @@ test("invalid task digest/generation is rejected without creating a record",{
 }, async()=>{
   const root=mkdtempSync(join(tmpdir(),"vn1-effect-invalid-"));
   const {DurableEffectHoldJournal}=await import("../durable-effect-hold.js");
-  const journal=new DurableEffectHoldJournal(join(root,"db.sqlite3"));
+  const journal=new DurableEffectHoldJournal(join(root,"db.sqlite3"),{initializeNew:true});
   try{
     assert.throws(()=>journal.create("x","VERA-NODE-1",true as any,1,DIGEST));
     assert.throws(()=>journal.create("x","VERA-NODE-1",1,1,"not a digest"));
@@ -89,7 +89,7 @@ test("dispatched state survives process exit but cannot silently resume dispatch
   const root=mkdtempSync(join(tmpdir(),"vn1-effect-dispatched-"));
   const db=join(root,"effects.sqlite3");
   const {DurableEffectHoldJournal}=await import("../durable-effect-hold.js");
-  let prior=new DurableEffectHoldJournal(db);
+  let prior=new DurableEffectHoldJournal(db,{initializeNew:true});
   try{
     const created=prior.create("effect:pending","VERA-NODE-1",6,1792164975049,DIGEST);
     prior.markDispatchIntent(created);
@@ -104,4 +104,40 @@ test("dispatched state survives process exit but cannot silently resume dispatch
     assert.throws(()=>next.create("effect:pending","VERA-NODE-1",7,1792164975999,DIGEST));
     assert.throws(()=>next.failBeforeDispatch(held),/CAS failed/);
   }finally{next.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test("missing recovered journal must not be silently recreated under same path",{
+  skip: supported ? false : "requires Node >=22"
+},async()=>{
+  const root=mkdtempSync(join(tmpdir(),"vn1-effect-missing-"));
+  const db=join(root,"lost.sqlite3");
+  const {DurableEffectHoldJournal}=await import("../durable-effect-hold.js");
+  try{
+    assert.throws(()=>new DurableEffectHoldJournal(db),/missing|recovery|initialize/i);
+    assert.equal(existsSync(db),false,"restart must not initialize an empty ledger");
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test("existing journal rejects reinitialization and unrelated SQLite schema",{
+  skip: supported ? false : "requires Node >=22"
+}, async()=>{
+  const root=mkdtempSync(join(tmpdir(),"vn1-effect-schema-"));
+  const db=join(root,"existing.sqlite3");
+  const wrong=join(root,"foreign.sqlite3");
+  const {DurableEffectHoldJournal}=await import("../durable-effect-hold.js");
+  const {DatabaseSync}=await import("node:sqlite");
+  const journal=new DurableEffectHoldJournal(db,{initializeNew:true});
+  try{
+    const record=journal.create("effect:hold","VERA-NODE-1",6,1792164975049,DIGEST);
+    journal.holdAmbiguous(journal.markDispatchIntent(record));
+    assert.throws(()=>new DurableEffectHoldJournal(db,{initializeNew:true}),/EEXIST|exist/i);
+  }finally{journal.close();}
+  const foreign=new DatabaseSync(wrong);
+  foreign.exec("CREATE TABLE unrelated (x INTEGER)");foreign.close();
+  try{
+    assert.throws(()=>new DurableEffectHoldJournal(wrong),/unrecognized effect journal schema/);
+    const recovered=new DurableEffectHoldJournal(db);
+    try{assert.equal(recovered.get("effect:hold")?.state,"OUTCOME_UNKNOWN");}
+    finally{recovered.close();}
+  }finally{rmSync(root,{recursive:true,force:true});}
 });
