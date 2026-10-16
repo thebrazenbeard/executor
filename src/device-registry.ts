@@ -16,6 +16,7 @@ type Pending = {
 export class DeviceConnection {
   readonly execution: LanePool;
   private pending = new Map<string, Pending>();
+  private retired = false;
 
   constructor(
     readonly id: string,
@@ -36,7 +37,7 @@ export class DeviceConnection {
 
   notify(payload: JsonRpc): Promise<void> {
     return this.execution.run(() => new Promise<void>((resolve, reject) => {
-      if (this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device socket is not open", "FAILED"));
+      if (this.retired || this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device session retired or socket not open", "FAILED"));
       const wire: DeviceRequest = { type: "request", requestId: randomUUID(), payload };
       this.socket.send(JSON.stringify(wire), err => err ? reject(new DeviceEffectError(err.message, "OUTCOME_UNKNOWN")) : resolve());
     }));
@@ -44,7 +45,7 @@ export class DeviceConnection {
 
   request(payload: JsonRpc, timeoutMs = 120_000): Promise<JsonRpc> {
     return this.execution.run(() => new Promise<JsonRpc>((resolve, reject) => {
-      if (this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device socket is not open", "FAILED"));
+      if (this.retired || this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device session retired or socket not open", "FAILED"));
       const requestId = randomUUID();
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
@@ -65,6 +66,7 @@ export class DeviceConnection {
   get queuedCount() { return this.execution.queuedCount; }
 
   close(reason = "device disconnected") {
+    this.retired = true;
     for (const [id, p] of this.pending) {
       clearTimeout(p.timer);
       p.reject(new DeviceEffectError(reason, "OUTCOME_UNKNOWN"));
@@ -87,7 +89,10 @@ export class DeviceRegistry {
 
   attach(device: DeviceConnection) {
     const prior = this.devices.get(device.id);
-    if (prior && prior !== device) prior.socket.close(4001, "replaced by newer connection");
+    if (prior && prior !== device) {
+      prior.close("replaced by newer connection");
+      prior.socket.close(4001, "replaced by newer connection");
+    }
     this.devices.set(device.id, device);
     this.generations.set(device.id, (this.generations.get(device.id) ?? 0) + 1);
     this.connectedAt.set(device.id, Date.now());
