@@ -6,7 +6,7 @@ import WebSocket from "ws";
 import type { DeviceRequest, JsonRpc } from "./protocol.js";
 import { assertSafeDeviceServiceUrl, resolveInsideRoot, trustedSha256Matches } from "./security.js";
 import { payloadEnvironment } from "./payload-env.js";
-import { classifyRegistrationReceipt } from "./registration-proof.js";
+import { classifyRegistrationReceipt, parseDeviceServerFrame } from "./registration-proof.js";
 
 const serviceUrl = process.env.EXECUTOR_SERVICE_URL ?? "";
 const token = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
@@ -207,8 +207,11 @@ function connect() {
   });
 
   socket.on("message", raw => {
-    let message: { type?: string; requestId?: string; payload?: JsonRpc; nonce?: string; deviceId?: string; registered?: boolean; generation?: number; connectedAt?: number };
-    try { message = JSON.parse(raw.toString()); } catch { socket.close(4002, "invalid json"); return; }
+    const message = parseDeviceServerFrame(raw.toString());
+    if (!message) {
+      socket.close(4002, "invalid device server frame");
+      return;
+    }
     if (message.type === "ready") {
       console.error(JSON.stringify({ status: "device-websocket-ready" }));
       if (registrationProbeEnabled && !registrationReady) {

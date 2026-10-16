@@ -16,6 +16,27 @@ export type RegistrationReceipt = {
 
 const NONCE = /^[a-f0-9]{32}$/;
 
+/** Preserve an explicit reject path for JSON primitives and arrays from the peer.
+ * This is framing validation, not proof of sender identity or command authority.
+ */
+export type DeviceServerFrame = {
+  type?: string;
+  requestId?: string;
+  payload?: import("./protocol.js").JsonRpc;
+  nonce?: string;
+  deviceId?: string;
+  registered?: boolean;
+  generation?: number;
+  connectedAt?: number;
+};
+
+export function parseDeviceServerFrame(raw: string): DeviceServerFrame | undefined {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return; }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+  return parsed as DeviceServerFrame;
+}
+
 export function parseRegistrationProbe(value: unknown): RegistrationProbe | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return;
   const p = value as Record<string, unknown>;
