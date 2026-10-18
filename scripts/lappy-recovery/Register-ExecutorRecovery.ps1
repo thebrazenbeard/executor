@@ -18,7 +18,7 @@ if(-not $Apply){
     task_name=$name
     user=$user
     already_exists=[bool]$existing
-    repeat_interval_minutes=5
+    repeat_interval_minutes=1
     run_level='LIMITED'
     script=$script
     local_gateway_ports='19887,19888'
@@ -31,7 +31,7 @@ $exe=Join-Path $PSHOME 'powershell.exe'
 $arguments='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$script+'"'
 $action=New-ScheduledTaskAction -Execute $exe -Argument $arguments
 $logon=New-ScheduledTaskTrigger -AtLogOn -User $user
-$repeat=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
+$repeat=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
 $principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 $settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 9) -StartWhenAvailable
 Register-ScheduledTask -TaskName $name -Action $action -Trigger @($logon,$repeat) -Principal $principal -Settings $settings -Description 'Executor control-plane fail-closed restart on allowed localhost ports. Status in %LOCALAPPDATA%\Executor\Recovery\health.json.' -ErrorAction Stop | Out-Null
