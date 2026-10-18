@@ -100,11 +100,19 @@ const server = http.createServer(async (req, res) => {
 
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req) {
-    const b = Buffer.from(chunk);
-    size += b.length;
-    if (size > 2_000_000) return json(res, 413, { error: "request too large" });
-    chunks.push(b);
+  try {
+    for await (const chunk of req) {
+      const b = Buffer.from(chunk);
+      size += b.length;
+      if (size > 2_000_000) return json(res, 413, { error: "request too large" });
+      chunks.push(b);
+    }
+  } catch {
+    // A client abort during body streaming must not crash the shared gateway.
+    if (!req.aborted && !res.destroyed && !res.headersSent) {
+      try { json(res, 400, { error: "request stream failed" }); } catch {}
+    }
+    return;
   }
 
   let payload: unknown;
@@ -236,7 +244,7 @@ const deviceServer = http.createServer((req, res) => {
   return json(res, 404, { error: "not found" });
 });
 
-const wss = new WebSocketServer({ noServer: true, maxPayload: 2_000_000 });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 16_000_000 });
 deviceServer.on("upgrade", (req, socket, head) => {
   if (req.url !== "/device") return socket.destroy();
   if (!isOriginAllowed(req.headers.origin, allowedOrigins)) return socket.destroy();
