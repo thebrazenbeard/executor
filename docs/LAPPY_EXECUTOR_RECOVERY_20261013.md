@@ -42,3 +42,40 @@ The existing `Get-ExecutorChatGPTActivationStatus.ps1` may still say `tunnel id 
 > **Objection:** Running a second watchdog can race the existing device-agent keepalive.
 
 **PARTIALLY ACCEPTED.** This new task supervises only the **gateway/control plane** with a single mutex, bounded restart backoff, and no new device-agent task or device enrollment. The existing device task remains responsible for the agent. The exact components must not be conflated.
+
+## 2026-10-18 Lappy recovery cadence repair (installed, not cold-boot qualified)
+
+The live `Vera-Executor-ControlPlane-Recovery` Task Scheduler principal remains
+`patri` / `Interactive` / `Limited`, preserves `IgnoreNew`, and retains
+its existing logon trigger and PowerShell action. Its single recurring time
+trigger was changed in place from `PT5M` to `PT1M` and read back.
+The `Executor Device` task separately retains the prior validated password
+logon and 3 x `PT1M` process restart settings; neither identity was changed.
+
+The installed `%LOCALAPPDATA%\Executor\Recovery\Invoke-ExecutorRecovery.ps1`
+uses stable consecutive local-readiness checks, gates failed attempts for 90
+seconds instead of 15 minutes, and clears a stale cooldown only when already
+locally healthy. It retains the original single mutex, existing DPAPI tunnel
+credentials, exact 19887/19888/9443 ports and `Manual` mapping. Atomic
+replacement verified installed script SHA-256
+`1A2415E1B21761CE5DB3A7BF8E7CC0638AA97A64D4E0E825ECBFDE6D3400FF25`.
+Original PowerShell script and Task Scheduler XML were separately backed up
+locally under `Recovery\backups\startup-hardening-20261018-145921`.
+
+**Executed evidence:** PowerShell parse PASS; isolated fake `LOCALAPPDATA` and
+distinct mutex with NO real credentials or gateway startup verified 4 PASS /
+0 FAIL (20, 60, 120, 180 seconds after a synthetic failed start).
+An actual healthy scheduled recovery execution returned Task Scheduler 0,
+`LOCAL_READY`, with no 19887/19888/9443 listener PID replacement. Subsequently
+the 1-minute task fired unattended (15:05:24 local) with Task Scheduler 0
+and `LOCAL_READY`. Direct ChatGPT Executor `list_devices` returned Lappy,
+VERA-NODE-1, VN2 connected, and live Lappy commands succeeded.
+
+**Claim limits:** An actual Windows reboot, logged-out/pre-login startup,
+induced gateway-crash recovery and longer soak were NOT tested. `Interactive`
+means the gateway recovery task depends on the user's logged-on context;
+it must not be silently moved to SYSTEM (user-scoped DPAPI credentials would
+no longer be available). Remote route health at time of verification does
+not prove future unattended operation or permanent external connectivity.
+The GitHub source change is a Draft for reproducibility; the installed
+Lappy changes are the active repair, not a main merge or new service.

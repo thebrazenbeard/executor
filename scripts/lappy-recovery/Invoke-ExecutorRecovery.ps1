@@ -48,6 +48,19 @@ function Direct-Status {
     return ($obj.running -eq $true)
   } catch {return $false}
 }
+function Local-Ready {
+  # Two consecutive exact direct-status/TLS/port checks; avoid transient false BACKOFF.
+  $consecutive = 0
+  for($attempt=0;$attempt -lt 4;$attempt++) {
+    if((Direct-Status) -and (Is-PortOpen 19887) -and (Is-PortOpen 19888) -and (Is-PortOpen 9443)) {
+      $consecutive++
+      if($consecutive -ge 2){return $true}
+    } else { $consecutive=0 }
+    if($attempt -lt 3){Start-Sleep -Milliseconds 700}
+  }
+  return $false
+}
+
 function Unseal([string]$cipher) {
   $secure=ConvertTo-SecureString -String $cipher -ErrorAction Stop
   $ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
@@ -57,7 +70,9 @@ function Unseal([string]$cipher) {
 try {
   try{$locked=$mutex.WaitOne(0)}catch [System.Threading.AbandonedMutexException]{$locked=$true}
   if(-not $locked) {Write-Output 'ANOTHER_EXECUTOR_RECOVERY_RUNNING';return}
-  if((Direct-Status) -and (Is-PortOpen 19887) -and (Is-PortOpen 19888) -and (Is-PortOpen 9443)) {
+  if(Local-Ready) {
+    # Clear a stale failure cooldown only after two healthy source/TLS checks.
+    Remove-Item -LiteralPath $stampFile -Force -ErrorAction SilentlyContinue
     Write-Status 'LOCAL_READY' 'LOCAL_COMPONENTS_UP_CLOUD_REQUIRES_INDEPENDENT_CHECK'
     return
   }
@@ -72,8 +87,8 @@ try {
   if(Test-Path -LiteralPath $stampFile -PathType Leaf){
     $last=[DateTime]::MinValue
     if([DateTime]::TryParse((Get-Content -Raw -LiteralPath $stampFile),[ref]$last)) {
-      if([DateTime]::UtcNow.Subtract($last.ToUniversalTime()).TotalMinutes -lt 15){
-        Write-Status 'BACKOFF' 'PRIOR_ATTEMPT_WITHIN_15_MINUTES'
+      if([DateTime]::UtcNow.Subtract($last.ToUniversalTime()).TotalSeconds -lt 90){
+        Write-Status 'BACKOFF' 'PRIOR_ATTEMPT_WITHIN_90_SECONDS'
         return
       }
     }
