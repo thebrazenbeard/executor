@@ -23,10 +23,10 @@ the credential if the account password changes. The helper backs up an existing
 task, preserves device enrollment, adds boot and sign-in triggers in unattended
 mode, removes the default task duration cutoff, and configures three retries.
 
-New enrollment supports the same mode through
-Install-ExecutorDevice.ps1 -Unattended -Credential $credential. Without that
-switch, installation retains sign-in startup. Validate the credential account
-before installation stops any existing device.
+New enrollment keeps its existing sign-in startup and selected source ref.
+After enrollment, use this helper to select unattended boot. The installer stays
+self-contained so installing a previously pinned source ref does not depend on
+new helper files being present in that older agent checkout.
 
 The launcher refuses a duplicate agent or occupied launcher lock with exit 20;
 that result does not establish connectivity. A managed Windows agent watches its
