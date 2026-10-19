@@ -28,9 +28,18 @@ try {
   try { $mutexAcquired = $mutex.WaitOne(0) }
   catch [System.Threading.AbandonedMutexException] { $mutexAcquired = $true }
   if (-not $mutexAcquired) {
-    Write-Host "Executor device agent already running for $($config.device_id)"
-    exit 0
+    [Console]::Error.WriteLine("Executor launcher lock occupied; device connectivity is not verified")
+    exit 20
   }
+
+$agentPath = Join-Path ([string]$config.agent_root) "dist\device-agent.js"
+$existingAgent = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object {
+  $_.CommandLine -and $_.CommandLine.IndexOf($agentPath,[StringComparison]::OrdinalIgnoreCase) -ge 0
+})
+if ($existingAgent.Count -gt 0) {
+  [Console]::Error.WriteLine("Executor agent already exists; device connectivity is not verified. PID=" + ($existingAgent.ProcessId -join ','))
+  exit 20
+}
 
 $secure = (Get-Content -Raw -Encoding ASCII -LiteralPath $credentialPath).Trim() | ConvertTo-SecureString
 $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
@@ -44,6 +53,7 @@ finally {
 $env:EXECUTOR_SERVICE_URL = [string]$config.service_url
 $env:EXECUTOR_DEVICE_ID = [string]$config.device_id
 $env:EXECUTOR_DEVICE_TOKEN = $token
+$env:EXECUTOR_LAUNCHER_PID = [string]$PID
 $env:EXECUTOR_INSTALL_ROOT = [string]$config.payload_root
 $env:EXECUTOR_TRUSTED_MANIFEST_SHA256 = [string]$config.manifest_sha256
 if ($config.PSObject.Properties.Name -contains "ca_path" -and -not [string]::IsNullOrWhiteSpace([string]$config.ca_path)) {
@@ -66,6 +76,7 @@ try {
 }
 finally {
   $env:EXECUTOR_DEVICE_TOKEN = $null
+  $env:EXECUTOR_LAUNCHER_PID = $null
   $env:EXECUTOR_DEVICE_CA_FILE = $null
   $env:EXECUTOR_DEVICE_TLS_SERVER_NAME = $null
   $token = $null

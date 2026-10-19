@@ -9,11 +9,21 @@ param(
   [string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA "Executor"),
   [string]$AgentRoot = (Join-Path (Join-Path $env:LOCALAPPDATA "Executor") "Agent"),
   [string]$PayloadRoot = (Join-Path (Join-Path $env:LOCALAPPDATA "Executor") "DesktopCommanderMCP"),
-  [string]$TaskName = "Executor Device"
+  [string]$TaskName = "Executor Device",
+  [switch]$Unattended,
+  [System.Management.Automation.PSCredential]$Credential
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if($Unattended -and -not $Credential){throw "Unattended installation requires the current Windows account credential"}
+if($Credential -and -not $Unattended){throw "Credential is accepted only with Unattended"}
+if($Credential){
+  $current=[Security.Principal.WindowsIdentity]::GetCurrent()
+  $sid=(New-Object Security.Principal.NTAccount($Credential.UserName)).Translate([Security.Principal.SecurityIdentifier])
+  if($sid.Value -ne $current.User.Value){throw "Credential must identify the current account that owns the DPAPI device token"}
+}
 
 function Require-Command([string]$Name) {
   $command = Get-Command $Name -ErrorAction SilentlyContinue
@@ -133,13 +143,8 @@ try {
   } | ConvertTo-Json -Depth 4
   $configJson | Set-Content -LiteralPath $configPath -Encoding UTF8
 
-  $launcher = Join-Path $AgentRoot "scripts\Start-ExecutorInstalledDevice.ps1"
-  $arguments = '-NoProfile -WindowStyle Hidden -File "{0}" -RuntimeRoot "{1}"' -f $launcher,$RuntimeRoot
-  $action = New-ScheduledTaskAction -Execute $powershell -Argument $arguments
-  $userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
-  $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+  # Set-ExecutorInstalledDeviceStartup performs Register-ScheduledTask/Set-ScheduledTask.
+  & (Join-Path $AgentRoot "scripts\Set-ExecutorInstalledDeviceStartup.ps1") -RuntimeRoot $RuntimeRoot -TaskName $TaskName -AtStartup:$Unattended -Credential $Credential | Out-Null
   Start-ScheduledTask -TaskName $TaskName
 
   [pscustomobject]@{
