@@ -22,7 +22,7 @@ function powershell(script: string) {
       }
     });
 }
-test("startup dry run distinguishes sign-in from credential-bound unattended boot without registering a task",
+test("startup dry run distinguishes sign-in from credential-bound unattended boot without scheduler access",
   { skip: !windows, timeout: 60000 }, async () => {
   const root = await mkdtemp(join(tmpdir(), "executor-startup-"));
   const task = "Executor-regression-" + Date.now();
@@ -36,13 +36,15 @@ test("startup dry run distinguishes sign-in from credential-bound unattended boo
       " -RuntimeRoot " + quote(root) + " -DryRun";
     const result = powershell(
       "$ErrorActionPreference='Stop';" +
-      "$before=@(Get-ScheduledTask -TaskName " + quote(task) + " -ErrorAction SilentlyContinue).Count;" +
+      "$script:schedulerCalls=0;" +
+      "function Get-ScheduledTask {$script:schedulerCalls++;throw 'Unexpected scheduler access'};" +
+      "function Register-ScheduledTask {$script:schedulerCalls++;throw 'Unexpected scheduler mutation'};" +
+      "function Set-ScheduledTask {$script:schedulerCalls++;throw 'Unexpected scheduler mutation'};" +
       "$logon=(" + invoke + ")|ConvertFrom-Json;" +
       "$credential=New-Object Management.Automation.PSCredential([Security.Principal.WindowsIdentity]::GetCurrent().Name,(ConvertTo-SecureString 'fixture-never-registered' -AsPlainText -Force));" +
       "$boot=(" + invoke + " -AtStartup -Credential $credential)|ConvertFrom-Json;" +
       "$rejected=$false;try{" + invoke + " -AtStartup}catch{$rejected=$true};" +
-      "$after=@(Get-ScheduledTask -TaskName " + quote(task) + " -ErrorAction SilentlyContinue).Count;" +
-      "@{logon=$logon;boot=$boot;missing_credential_rejected=$rejected;before=$before;after=$after}|ConvertTo-Json -Depth 5"
+      "@{logon=$logon;boot=$boot;missing_credential_rejected=$rejected;scheduler_calls=$script:schedulerCalls}|ConvertTo-Json -Depth 5"
     );
     assert.equal(result.status, 0, result.stderr);
     const data = JSON.parse(result.stdout);
@@ -53,8 +55,7 @@ test("startup dry run distinguishes sign-in from credential-bound unattended boo
     assert.equal(data.boot.execution_time_limit, "PT0S");
     assert.equal(data.boot.restart_count, 3);
     assert.equal(data.missing_credential_rejected, true);
-    assert.equal(data.before, 0);
-    assert.equal(data.after, 0);
+    assert.equal(data.scheduler_calls, 0);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 test("installed launcher rejects an existing agent before decrypting a credential or creating another agent",

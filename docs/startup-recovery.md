@@ -37,7 +37,7 @@ a scheduled launcher does not leave its agent running indefinitely.
 
 npm test includes real responsive/silent WebSocket peers, launcher disappearance,
 and Windows-only startup dry-run and duplicate-process regressions. The dry-run
-test supplies a synthetic credential and verifies no task is registered.
+test supplies a synthetic credential and rejects any Task Scheduler access.
 
 A restart test needs an actual command through the connector after automatic
 recovery. A full reboot test additionally needs changed OS boot evidence and no
