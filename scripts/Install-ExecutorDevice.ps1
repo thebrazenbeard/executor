@@ -139,7 +139,8 @@ try {
   $userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
   $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+  $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries
+  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
   Start-ScheduledTask -TaskName $TaskName
 
   [pscustomobject]@{

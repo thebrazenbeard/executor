@@ -2,10 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import WebSocket from "ws";
+import { createServer } from "node:net";
 
 test("Executor can run map-only device credentials and binds each token to its device ID", { timeout: 20_000 }, async () => {
-  const port = 22787 + Math.floor(Math.random() * 500);
-  const devicePort = port + 1000;
+  // Let the OS choose two distinct available ports, avoiding Windows exclusions
+  // and fixed ranges shared with other local deployments.
+  const reservations = [createServer(), createServer()];
+  await Promise.all(reservations.map(server => new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  })));
+  const [port, devicePort] = reservations.map(server => (server.address() as { port: number }).port);
+  await Promise.all(reservations.map(server => new Promise<void>((resolve, reject) =>
+    server.close(error => error ? reject(error) : resolve()))));
   const child = spawn(process.execPath, ["dist/server.js"], {
     env: {
       ...process.env,
@@ -23,6 +32,8 @@ test("Executor can run map-only device credentials and binds each token to its d
     stdio: ["ignore", "pipe", "pipe"]
   });
 
+  let startupError = "";
+  child.stderr.on("data", chunk => { startupError = (startupError + chunk.toString()).slice(-4000); });
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("server start timeout")), 8000);
     child.stdout.on("data", chunk => {
@@ -31,7 +42,7 @@ test("Executor can run map-only device credentials and binds each token to its d
         resolve();
       }
     });
-    child.once("exit", code => reject(new Error("server exited early: " + code)));
+    child.once("exit", code => { clearTimeout(timer); reject(new Error("server exited early: " + code + " " + startupError)); });
   });
 
   async function connect(deviceId: string, token: string) {

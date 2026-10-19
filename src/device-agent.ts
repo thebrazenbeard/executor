@@ -1,3 +1,5 @@
+import { watchLauncher } from "./launcher-liveness.js";
+import { attachHeartbeat } from "./connection-heartbeat.js";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -57,6 +59,15 @@ const child = spawn(nodeExe, manifest.mcp_args, {
   env: payloadEnvironment(process.env),
   windowsHide: true
 });
+
+if (process.platform === "win32" && process.env.EXECUTOR_LAUNCHER_PID) {
+  const stopLauncherWatch = watchLauncher(Number(process.env.EXECUTOR_LAUNCHER_PID), () => {
+    console.error(JSON.stringify({ status: "device-launcher-exited" }));
+    child.kill();
+    process.exit(1);
+  });
+  process.once("exit", stopLauncherWatch);
+}
 
 const LF = String.fromCharCode(10);
 let buffer = "";
@@ -171,6 +182,7 @@ function connect() {
       ? { servername: tlsServerName, headers: { Host: tlsHostHeader } }
       : {})
   });
+  attachHeartbeat(socket, { onTimeout: () => console.error(JSON.stringify({ status: "device-heartbeat-timeout" })) });
   ws = socket;
 
   socket.on("open", () => {
