@@ -11,7 +11,16 @@ const windows = process.platform === "win32";
 const quote = (s: string) => "'" + s.replaceAll("'", "''") + "'";
 function powershell(script: string) {
   return spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand",
-    Buffer.from(script, "utf16le").toString("base64")], { encoding: "utf8", timeout: 20000 });
+    Buffer.from(script, "utf16le").toString("base64")], {
+      encoding: "utf8", timeout: 20000,
+      // CI invokes npm from PowerShell 7; this subprocess is Windows PowerShell
+      // 5.1 and must load its own system modules rather than inherited PS7 ones.
+      env: {
+        ...process.env,
+        PSModulePath: join(process.env.SystemRoot ?? "C:\\Windows",
+          "System32", "WindowsPowerShell", "v1.0", "Modules")
+      }
+    });
 }
 test("startup dry run distinguishes sign-in from credential-bound unattended boot without registering a task",
   { skip: !windows, timeout: 60000 }, async () => {
