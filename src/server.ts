@@ -2,6 +2,7 @@ import http from "node:http";
 import { WebSocketServer } from "ws";
 import { bearerAuthorized, deviceTokenAuthorized, loadDeviceTokensFile, mergeDeviceTokenMaps, parseDeviceTokens } from "./auth.js";
 import { DeviceConnection, DeviceEffectError, DeviceRegistry } from "./device-registry.js";
+import { gatewayRegistrationReceipt } from "./registration-proof.js";
 import { WorkContextOrchestrator } from "./orchestrator.js";
 import type { DeviceHello, DeviceResponse, JsonRpc } from "./protocol.js";
 import { isJsonRpc, isNotification } from "./protocol.js";
@@ -266,6 +267,9 @@ wss.on("connection", ws => {
   ws.on("message", raw => {
     let message: unknown;
     try { message = JSON.parse(raw.toString()); } catch { ws.close(4002, "invalid json"); return; }
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      return ws.close(4002, "invalid device message");
+    }
     if (!device) {
       const hello = message as Partial<DeviceHello>;
       if (hello.type !== "hello" || typeof hello.deviceId !== "string" || typeof hello.token !== "string") return ws.close(4003, "hello required");
@@ -285,6 +289,13 @@ wss.on("connection", ws => {
       device = new DeviceConnection(hello.deviceId, ws, capacity.executionPerDevice, initializeResult);
       registry.attach(device);
       ws.send(JSON.stringify({ type: "ready", deviceId: device.id }));
+      return;
+    }
+    if ((message as { type?: unknown }).type === "registration-probe") {
+      const receipt = gatewayRegistrationReceipt(registry, device, message);
+      if (!receipt) return ws.close(4002, "invalid registration probe");
+      ws.send(JSON.stringify(receipt));
+      if (!receipt.registered) ws.close(4005, "registry session absent or replaced");
       return;
     }
     const response = message as Partial<DeviceResponse>;

@@ -6,6 +6,15 @@ export type EffectDisposition =
   | "FAILED"
   | "OUTCOME_UNKNOWN";
 
+const ALLOWED_TRANSITIONS: Record<EffectDisposition, readonly EffectDisposition[]> = {
+  QUEUED: ["ADMITTED", "FAILED"],
+  ADMITTED: ["DISPATCHED", "FAILED"],
+  DISPATCHED: ["COMPLETED", "FAILED", "OUTCOME_UNKNOWN"],
+  COMPLETED: [],
+  FAILED: [],
+  OUTCOME_UNKNOWN: []
+};
+
 export type EffectRecord = {
   requestId: string;
   deviceId: string;
@@ -22,6 +31,7 @@ export class EffectLedger {
   }
 
   create(requestId: string, deviceId: string, generation: number, replaySafe = false) {
+    if (this.records.has(requestId)) throw new Error("duplicate effect ID already exists");
     const record: EffectRecord = { requestId, deviceId, generation, disposition: "QUEUED", replaySafe, updatedAt: Date.now() };
     this.records.set(requestId, record);
     while (this.records.size > this.maxRecords) {
@@ -35,6 +45,8 @@ export class EffectLedger {
   transition(requestId: string, disposition: EffectDisposition) {
     const record = this.records.get(requestId);
     if (!record) throw new Error("unknown effect");
+    if (!ALLOWED_TRANSITIONS[record.disposition].includes(disposition))
+      throw new Error("invalid effect state transition from " + record.disposition + " to " + disposition);
     record.disposition = disposition;
     record.updatedAt = Date.now();
     return record;

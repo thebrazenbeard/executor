@@ -16,6 +16,8 @@ type Pending = {
 export class DeviceConnection {
   readonly execution: LanePool;
   private pending = new Map<string, Pending>();
+  private pendingNotifications = new Set<(reason: string) => void>();
+  private retired = false;
 
   constructor(
     readonly id: string,
@@ -34,17 +36,42 @@ export class DeviceConnection {
     p.resolve(message.payload);
   }
 
-  notify(payload: JsonRpc): Promise<void> {
+  notify(payload: JsonRpc, timeoutMs = 120_000): Promise<void> {
     return this.execution.run(() => new Promise<void>((resolve, reject) => {
-      if (this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device socket is not open", "FAILED"));
+      if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000)
+        return reject(new DeviceEffectError("invalid notification send timeout", "FAILED"));
+      if (this.retired || this.socket.readyState !== this.socket.OPEN)
+        return reject(new DeviceEffectError("device session retired or socket not open", "FAILED"));
+      let settled = false;
+      const rejectUnknown = (reason: string) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.pendingNotifications.delete(rejectUnknown);
+        reject(new DeviceEffectError(reason, "OUTCOME_UNKNOWN"));
+      };
+      const timer = setTimeout(() => rejectUnknown("device notification send timed out"), timeoutMs);
+      this.pendingNotifications.add(rejectUnknown);
       const wire: DeviceRequest = { type: "request", requestId: randomUUID(), payload };
-      this.socket.send(JSON.stringify(wire), err => err ? reject(new DeviceEffectError(err.message, "OUTCOME_UNKNOWN")) : resolve());
+      try {
+        this.socket.send(JSON.stringify(wire), err => {
+          if (err || this.retired)
+            return rejectUnknown(err?.message ?? "device session retired during notification send");
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          this.pendingNotifications.delete(rejectUnknown);
+          resolve();
+        });
+      } catch (error) {
+        rejectUnknown(error instanceof Error ? error.message : "device notification send threw");
+      }
     }));
   }
 
   request(payload: JsonRpc, timeoutMs = 120_000): Promise<JsonRpc> {
     return this.execution.run(() => new Promise<JsonRpc>((resolve, reject) => {
-      if (this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device socket is not open", "FAILED"));
+      if (this.retired || this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device session retired or socket not open", "FAILED"));
       const requestId = randomUUID();
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
@@ -52,12 +79,19 @@ export class DeviceConnection {
       }, timeoutMs);
       this.pending.set(requestId, { resolve, reject, timer });
       const wire: DeviceRequest = { type: "request", requestId, payload };
-      this.socket.send(JSON.stringify(wire), err => {
-        if (!err) return;
+      const failSend = (reason: string) => {
+        if (!this.pending.has(requestId)) return;
         clearTimeout(timer);
         this.pending.delete(requestId);
-        reject(new DeviceEffectError(err.message, "OUTCOME_UNKNOWN"));
-      });
+        reject(new DeviceEffectError(reason, "OUTCOME_UNKNOWN"));
+      };
+      try {
+        this.socket.send(JSON.stringify(wire), err => {
+          if (err) failSend(err.message);
+        });
+      } catch (error) {
+        failSend(error instanceof Error ? error.message : "device request send threw");
+      }
     }));
   }
 
@@ -65,6 +99,8 @@ export class DeviceConnection {
   get queuedCount() { return this.execution.queuedCount; }
 
   close(reason = "device disconnected") {
+    this.retired = true;
+    for (const rejectUnknown of [...this.pendingNotifications]) rejectUnknown(reason);
     for (const [id, p] of this.pending) {
       clearTimeout(p.timer);
       p.reject(new DeviceEffectError(reason, "OUTCOME_UNKNOWN"));
@@ -87,7 +123,10 @@ export class DeviceRegistry {
 
   attach(device: DeviceConnection) {
     const prior = this.devices.get(device.id);
-    if (prior && prior !== device) prior.socket.close(4001, "replaced by newer connection");
+    if (prior && prior !== device) {
+      prior.close("replaced by newer connection");
+      prior.socket.close(4001, "replaced by newer connection");
+    }
     this.devices.set(device.id, device);
     this.generations.set(device.id, (this.generations.get(device.id) ?? 0) + 1);
     this.connectedAt.set(device.id, Date.now());
