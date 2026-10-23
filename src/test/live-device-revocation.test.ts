@@ -71,6 +71,8 @@ test("active file-backed device sessions revoke on rotation, deletion and invali
     stdio: ["ignore", "pipe", "pipe"]
   });
 
+  let credentialErrorLog = "";
+  child.stderr?.on("data", chunk => { credentialErrorLog += chunk.toString(); });
   const wsUrl = "ws://127.0.0.1:" + devicePort + "/device";
   const mcpUrl = "http://127.0.0.1:" + mcpPort;
   try {
@@ -125,13 +127,15 @@ test("active file-backed device sessions revoke on rotation, deletion and invali
     assert.equal(beta.ws.readyState, WebSocket.OPEN);
 
     const storeFailureClose = waitForClose(beta.ws);
-    await replaceCredentials("{invalid-json");
+    await replaceCredentials('{"alpha":unquoted-should-never-appear-777}');
     assert.equal(await storeFailureClose, 4005, "malformed credential source must fail closed");
     const health = await fetch(mcpUrl + "/health", {
       headers: { authorization: "Bearer client-test" }
     });
     const state = await health.json() as { connectedDeviceCount: number };
     assert.equal(state.connectedDeviceCount, 0);
+    assert.doesNotMatch(credentialErrorLog, /unquoted-should-never-appear-777/,
+      "parser errors must never disclose malformed credential bytes into service logs");
   } finally {
     child.kill();
     await rm(dir, { recursive: true, force: true });
