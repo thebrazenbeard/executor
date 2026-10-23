@@ -56,17 +56,11 @@ test("device agent exposes safe websocket handshake state and bounds a stuck han
   assert.match(agent, /device-websocket-ready/);
 });
 
-test("device heartbeat source contract bounds half-open links without implying request success", async () => {
-  // Source contract: importing the agent would verify a local manifest and spawn a payload.
-  // A real peer-silence test remains required before deployment qualification.
+test("device agent attaches the isolated heartbeat without hiding unknown outcomes", async () => {
   const agent = await readFile("src/device-agent.ts", "utf8");
-
-  assert.match(agent, /socket\.on\("pong",\s*\(\)\s*=>\s*\{\s*awaitingPong = false;/);
-  assert.match(agent, /socket\.once\("close",\s*\(\)\s*=>\s*\{\s*if \(heartbeat\) clearInterval\(heartbeat\);/);
-  assert.match(agent, /if \(socket\.readyState !== WebSocket\.OPEN\) return;/);
-  assert.match(agent, /if \(awaitingPong\)\s*\{[\s\S]*?device-heartbeat-timeout[\s\S]*?socket\.terminate\(\);/);
-  assert.match(agent, /awaitingPong = true;\s*socket\.ping\(\);/);
-  assert.match(agent, /\}, 15_000\);\s*heartbeat\.unref\(\);/);
+  assert.match(agent, /import \{ attachConnectionHeartbeat \} from "\.\/connection-heartbeat\.js"/);
+  assert.match(agent, /attachConnectionHeartbeat\(socket, \{/);
+  assert.match(agent, /device-heartbeat-timeout/);
   assert.match(agent, /request-outcome-unknown-after-disconnect/);
   assert.match(agent, /pendingOutbound\.clear\(\);[\s\S]*?setTimeout\(connect, delay\);/);
 });
