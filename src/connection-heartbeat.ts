@@ -29,8 +29,11 @@ export function attachConnectionHeartbeat(
     if (socket.readyState !== WebSocket.OPEN) return;
     closingTicks = 0;
     if (awaitingPong) {
-      options.onTimeout?.();
-      socket.terminate();
+      try {
+        options.onTimeout?.();
+      } finally {
+        socket.terminate();
+      }
       return;
     }
     awaitingPong = true;
