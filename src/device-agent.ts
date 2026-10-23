@@ -173,7 +173,23 @@ function connect() {
   });
   ws = socket;
 
+  let awaitingPong = false;
+  let heartbeat: NodeJS.Timeout | undefined;
+  socket.on("pong", () => { awaitingPong = false; });
+  socket.once("close", () => { if (heartbeat) clearInterval(heartbeat); });
+
   socket.on("open", () => {
+    heartbeat = setInterval(() => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      if (awaitingPong) {
+        console.error(JSON.stringify({ status: "device-heartbeat-timeout" }));
+        socket.terminate();
+        return;
+      }
+      awaitingPong = true;
+      socket.ping();
+    }, 15_000);
+    heartbeat.unref();
     console.error(JSON.stringify({ status: "device-websocket-open" }));
     reconnectAttempt = 0;
     socket.send(JSON.stringify({
