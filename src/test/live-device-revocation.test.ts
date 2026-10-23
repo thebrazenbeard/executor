@@ -134,8 +134,10 @@ test("active file-backed device sessions revoke on rotation, deletion and invali
     });
     const state = await health.json() as { connectedDeviceCount: number };
     assert.equal(state.connectedDeviceCount, 0);
-    assert.doesNotMatch(credentialErrorLog, /unquoted-should-never-appear-777/,
-      "parser errors must never disclose malformed credential bytes into service logs");
+    assert.match(credentialErrorLog, /device-credential-store-error/,
+      "the fail-closed parser diagnostic must actually be observed");
+    assert.doesNotMatch(credentialErrorLog, /unquoted|should-never|appear-777/,
+      "even truncated malformed credential bytes must not appear in service logs");
   } finally {
     child.kill();
     await rm(dir, { recursive: true, force: true });
