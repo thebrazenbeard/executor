@@ -105,6 +105,12 @@ The script updates the live credential file and prints a bootstrap PowerShell co
 
 The older `Start-ExecutorRuntime.ps1` all-in-one server+local-device+tunnel launcher remains as a convenience for single-machine development and qualification.
 
+## Active device credential revocation
+
+The device ingress checks the current per-device credential file when a workstation attaches, again before each downstream effect dispatch, and every second while a workstation remains connected. Rotating or removing a device token disconnects the existing attachment without restarting the control plane. If the credential store is unreadable or malformed, active device attachments are disconnected (fail closed). The existing per-device-over-shared-token precedence remains in force; removing an override can still permit the configured shared-token fallback, so do not configure a broad shared token if independent per-device revocation is required.
+
+A disconnected attachment cannot admit further effects, and pending requests report ambiguous outcomes rather than being replayed. **Revocation cannot undo an effect already sent to the workstation**, and idle-session cutoff is bounded by the one-second polling interval under normal scheduling. These are control-plane source semantics, not evidence of a live host rollout.
+
 ## Status
 
 The V1 branch is qualified on Ubuntu and Windows. Windows qualification builds the exact pinned Desktop Commander payload and observed 8 active execution lanes and 64 active logic lanes while processing 64 concurrent calls.

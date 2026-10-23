@@ -1,6 +1,6 @@
 import http from "node:http";
 import { WebSocketServer } from "ws";
-import { bearerAuthorized, deviceTokenAuthorized, loadDeviceTokensFile, mergeDeviceTokenMaps, parseDeviceTokens } from "./auth.js";
+import { bearerAuthorized, deviceTokenAuthorized, effectiveDeviceToken, loadDeviceTokensFile, mergeDeviceTokenMaps, parseDeviceTokens } from "./auth.js";
 import { DeviceConnection, DeviceEffectError, DeviceRegistry } from "./device-registry.js";
 import { WorkContextOrchestrator } from "./orchestrator.js";
 import type { DeviceHello, DeviceResponse, JsonRpc } from "./protocol.js";
@@ -10,7 +10,7 @@ import { isOriginAllowed } from "./security.js";
 import { ResourceKeyGate } from "./resource-gate.js";
 import { JsonlExecutionEventStore } from "./execution-store.js";
 import { EffectLedger } from "./effect-ledger.js";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { augmentToolsList, executorListDevicesTool, extractDeviceId, stripDeviceId } from "./tool-routing.js";
 
 const { port, host } = serverBindConfig();
@@ -32,6 +32,50 @@ const eventStore = process.env.EXECUTOR_EXECUTION_EVENT_FILE ? new JsonlExecutio
 const logic = new WorkContextOrchestrator(capacity.upstreamContexts, eventStore);
 const resourceGate = new ResourceKeyGate();
 const effects = new EffectLedger();
+const credentialProofKey = randomBytes(32);
+
+function credentialFingerprint(token: string): Buffer {
+  return createHmac("sha256", credentialProofKey).update(token).digest();
+}
+
+function currentDeviceTokens() {
+  return mergeDeviceTokenMaps(loadDeviceTokensFile(deviceTokensFile), deviceTokens);
+}
+
+function revokeAttachment(device: DeviceConnection, reason: string) {
+  // Detach first to fence queued dispatch. Closing pending calls is OUTCOME_UNKNOWN,
+  // because an already-sent effect cannot be undone or safely replayed.
+  registry.detach(device);
+  try { device.socket.close(4005, reason); }
+  catch { device.socket.terminate(); }
+}
+
+function reconcileAuthorizedDevices(): boolean {
+  let tokens: ReturnType<typeof currentDeviceTokens>;
+  try {
+    tokens = currentDeviceTokens();
+  } catch (error) {
+    console.error(JSON.stringify({
+      status: "device-credential-store-error",
+      message: "credential file unreadable or invalid"
+    }));
+    for (const id of registry.list()) {
+      const device = registry.get(id);
+      if (device) revokeAttachment(device, "credential store unavailable");
+    }
+    return false;
+  }
+  for (const id of registry.list()) {
+    const device = registry.get(id);
+    if (!device) continue;
+    const expected = effectiveDeviceToken(id, deviceToken, tokens);
+    if (!expected || !device.credentialDigest ||
+        !timingSafeEqual(credentialFingerprint(expected), device.credentialDigest)) {
+      revokeAttachment(device, "credential revoked");
+    }
+  }
+  return true;
+}
 
 function json(res: http.ServerResponse, status: number, body: unknown) {
   const data = JSON.stringify(body);
@@ -203,10 +247,13 @@ const server = http.createServer(async (req, res) => {
     const dispatch = <T>(work: (device: DeviceConnection) => Promise<T>) => {
       effects.transition(effectId, "ADMITTED");
       const execute = async () => {
+        const credentialStoreAvailable = reconcileAuthorizedDevices();
         const current = registry.getIfGeneration(deviceId, generation);
-        if (!current) {
+        if (!credentialStoreAvailable || !current) {
           effects.transition(effectId, "FAILED");
-          throw new Error("workstation connection changed before effect dispatch");
+          throw new Error(credentialStoreAvailable
+            ? "workstation authorization changed before effect dispatch"
+            : "device credential store unavailable");
         }
         effects.transition(effectId, "DISPATCHED");
         try {
@@ -270,19 +317,20 @@ wss.on("connection", ws => {
       const hello = message as Partial<DeviceHello>;
       if (hello.type !== "hello" || typeof hello.deviceId !== "string" || typeof hello.token !== "string") return ws.close(4003, "hello required");
       if (hello.deviceId.length < 1 || hello.deviceId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(hello.deviceId)) return ws.close(4003, "invalid device id");
-      let currentDeviceTokens = deviceTokens;
+      let admittedDeviceTokens: ReturnType<typeof currentDeviceTokens>;
       try {
-        currentDeviceTokens = mergeDeviceTokenMaps(loadDeviceTokensFile(deviceTokensFile), deviceTokens);
+        admittedDeviceTokens = currentDeviceTokens();
       } catch (error) {
-        console.error(JSON.stringify({ status: "device-credential-store-error", message: error instanceof Error ? error.message : "unknown credential-store error" }));
+        // Parsing diagnostics may contain raw malformed token-file bytes; never log them.
+        console.error(JSON.stringify({ status: "device-credential-store-error", message: "credential file unreadable or invalid" }));
         return ws.close(1011, "credential store unavailable");
       }
-      if (!deviceTokenAuthorized(hello.deviceId, hello.token, deviceToken, currentDeviceTokens)) return ws.close(4004, "unauthorized");
+      if (!deviceTokenAuthorized(hello.deviceId, hello.token, deviceToken, admittedDeviceTokens)) return ws.close(4004, "unauthorized");
       clearTimeout(helloTimer);
       const initializeResult = hello.initializeResult && typeof hello.initializeResult === "object" && !Array.isArray(hello.initializeResult)
         ? hello.initializeResult
         : {};
-      device = new DeviceConnection(hello.deviceId, ws, capacity.executionPerDevice, initializeResult);
+      device = new DeviceConnection(hello.deviceId, ws, capacity.executionPerDevice, initializeResult, credentialFingerprint(hello.token));
       registry.attach(device);
       ws.send(JSON.stringify({ type: "ready", deviceId: device.id }));
       return;
@@ -297,6 +345,10 @@ wss.on("connection", ws => {
     if (device) registry.detach(device);
   });
 });
+
+// Revocation also disconnects idle devices; dispatch checks narrow the race for new effects.
+const credentialPoll = setInterval(reconcileAuthorizedDevices, 1000);
+credentialPoll.unref();
 
 server.listen(port, host, () => {
   const address = server.address();

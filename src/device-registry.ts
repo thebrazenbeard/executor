@@ -21,7 +21,8 @@ export class DeviceConnection {
     readonly id: string,
     readonly socket: WebSocket,
     executionCapacity: number,
-    readonly initializeResult: Record<string, unknown> = {}
+    readonly initializeResult: Record<string, unknown> = {},
+    readonly credentialDigest?: Buffer
   ) {
     this.execution = new LanePool(executionCapacity);
   }
