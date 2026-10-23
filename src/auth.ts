@@ -39,15 +39,23 @@ export function parseDeviceTokens(raw: string | undefined): DeviceTokenMap {
   return tokens;
 }
 
+export function effectiveDeviceToken(
+  deviceId: string,
+  sharedToken: string,
+  perDeviceTokens: DeviceTokenMap
+): string | undefined {
+  const bound = perDeviceTokens.get(deviceId);
+  return bound !== undefined ? bound : (sharedToken.length > 0 ? sharedToken : undefined);
+}
+
 export function deviceTokenAuthorized(
   deviceId: string,
   actual: string,
   sharedToken: string,
   perDeviceTokens: DeviceTokenMap
 ): boolean {
-  const bound = perDeviceTokens.get(deviceId);
-  if (bound !== undefined) return equalSecret(actual, bound);
-  return sharedToken.length > 0 && equalSecret(actual, sharedToken);
+  const expected = effectiveDeviceToken(deviceId, sharedToken, perDeviceTokens);
+  return expected !== undefined && equalSecret(actual, expected);
 }
 
 
