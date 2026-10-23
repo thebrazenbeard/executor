@@ -57,7 +57,7 @@ function reconcileAuthorizedDevices(): boolean {
   } catch (error) {
     console.error(JSON.stringify({
       status: "device-credential-store-error",
-      message: error instanceof Error ? error.message : "credential store unavailable"
+      message: "credential file unreadable or invalid"
     }));
     for (const id of registry.list()) {
       const device = registry.get(id);
@@ -321,7 +321,8 @@ wss.on("connection", ws => {
       try {
         admittedDeviceTokens = currentDeviceTokens();
       } catch (error) {
-        console.error(JSON.stringify({ status: "device-credential-store-error", message: error instanceof Error ? error.message : "unknown credential-store error" }));
+        // Parsing diagnostics may contain raw malformed token-file bytes; never log them.
+        console.error(JSON.stringify({ status: "device-credential-store-error", message: "credential file unreadable or invalid" }));
         return ws.close(1011, "credential store unavailable");
       }
       if (!deviceTokenAuthorized(hello.deviceId, hello.token, deviceToken, admittedDeviceTokens)) return ws.close(4004, "unauthorized");
