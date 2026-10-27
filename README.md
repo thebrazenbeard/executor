@@ -119,6 +119,10 @@ See [docs/SETUP.md](docs/SETUP.md) for the self-hosted tunnel and workstation se
 
 Repository qualification does not prove that a particular private tunnel or workstation is currently online. Runtime activation remains separate evidence.
 
+## Optional Temporal chronology preview
+
+An explicit, read-only projection can render saved Executor execution events as Temporal V1 NDJSON without transmitting them or modifying either log. See [Temporal projection contract](docs/TEMPORAL_PROJECTION.md). It does not export arbitrary execution payloads, establish effect success, or enable automatic replication.
+
 
 ## Zero-cost, no-relay device ingress
 
