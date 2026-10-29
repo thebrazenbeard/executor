@@ -68,3 +68,75 @@ test("closed socket before send is a known failed disposition", async () => {
     error instanceof DeviceEffectError && error.disposition === "FAILED"
   );
 });
+
+test("device request queued beyond deadline fails before socket dispatch", async () => {
+  const socket = new FakeSocket();
+  const device = new DeviceConnection("fake", socket as any, 1);
+  const inFlight = device.request({ jsonrpc: "2.0", id: 1, method: "tools/call" }, 500);
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(socket.sent.length, 1);
+
+  await assert.rejects(
+    device.request({ jsonrpc: "2.0", id: 2, method: "tools/call" }, 20),
+    (error: unknown) => error instanceof DeviceEffectError && error.disposition === "FAILED"
+  );
+  assert.equal(socket.sent.length, 1);
+  assert.equal(device.queuedCount, 0);
+
+  device.accept({ type: "response", requestId: socket.sent[0].requestId, payload: { jsonrpc: "2.0", id: 1, result: {} } });
+  await inFlight;
+  assert.equal(device.activeCount, 0);
+  assert.equal(socket.sent.length, 1);
+});
+
+test("notification send callback cannot hold a device lane indefinitely", async () => {
+  const socket = new FakeSocket();
+  socket.send = (data: string) => { socket.sent.push(JSON.parse(data)); }; // no callback
+  const device = new DeviceConnection("fake", socket as any, 1);
+  let attempted = 0;
+  await assert.rejects(
+    device.notify({ jsonrpc: "2.0", method: "notifications/initialized" }, 20, () => { attempted++; }),
+    (error: unknown) => error instanceof DeviceEffectError && error.disposition === "OUTCOME_UNKNOWN"
+  );
+  assert.equal(attempted, 1);
+  assert.equal(device.activeCount, 0);
+});
+
+test("timed-out queued request never marks wire dispatch attempt", async () => {
+  const socket = new FakeSocket();
+  const device = new DeviceConnection("fake", socket as any, 1);
+  const first = device.request({ jsonrpc: "2.0", id: 1, method: "tools/call" }, 500);
+  let attempted = 0;
+  await assert.rejects(device.request({ jsonrpc: "2.0", id: 2, method: "tools/call" }, 20, () => { attempted++; }),
+    (error: unknown) => error instanceof DeviceEffectError && error.disposition === "FAILED");
+  assert.equal(attempted, 0);
+  assert.equal(socket.sent.length, 1);
+  device.accept({ type: "response", requestId: socket.sent[0].requestId, payload: { jsonrpc: "2.0", id: 1, result: {} } });
+  await first;
+});
+
+test("dispatch-marker exception is known prewire failure with no socket send", async () => {
+  const socket = new FakeSocket();
+  const device = new DeviceConnection("fake", socket as any, 1);
+  const marker = () => { throw new Error("ledger unavailable"); };
+  await assert.rejects(device.request({ jsonrpc: "2.0", id: 1, method: "tools/call" }, 100, marker),
+    (error: unknown) => error instanceof DeviceEffectError && error.disposition === "FAILED");
+  await assert.rejects(device.notify({ jsonrpc: "2.0", method: "notifications/initialized" }, 100, marker),
+    (error: unknown) => error instanceof DeviceEffectError && error.disposition === "FAILED");
+  assert.equal(socket.sent.length, 0);
+  assert.equal(device.activeCount, 0);
+});
+
+test("serialization failure never marks dispatch or calls socket.send", async () => {
+  const socket = new FakeSocket();
+  const device = new DeviceConnection("fake", socket as any, 1);
+  const invalidPayload = { jsonrpc: "2.0", method: "tools/call", params: { cyclic: 1n } } as any;
+  let marked = 0;
+  await assert.rejects(device.request(invalidPayload, 100, () => { marked++; }),
+    (error: unknown) => error instanceof DeviceEffectError && error.disposition === "FAILED");
+  await assert.rejects(device.notify(invalidPayload, 100, () => { marked++; }),
+    (error: unknown) => error instanceof DeviceEffectError && error.disposition === "FAILED");
+  assert.equal(marked, 0);
+  assert.equal(socket.sent.length, 0);
+  assert.equal(device.activeCount, 0);
+});

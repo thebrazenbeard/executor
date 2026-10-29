@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { LanePool } from "./lanes.js";
+import { LanePool, LaneQueueTimeoutError } from "./lanes.js";
 import { ExecutionEventLog } from "./execution-events.js";
 import type { ExecutionEventStore } from "./execution-store.js";
 
@@ -30,9 +30,9 @@ export class WorkContextOrchestrator {
     return record;
   }
 
-  async run<T>(laneId: string, work: () => Promise<T>): Promise<T> {
+  async run<T>(laneId: string, work: () => Promise<T>, queueWaitTimeoutMs?: number): Promise<T> {
     const lane = this.require(laneId);
-    return this.pool.run(async () => {
+    try { return await this.pool.run(async () => {
       lane.state = "running";
       lane.startedAt = Date.now();
       this.events.append(lane.id, "running", { state: lane.state, effectDevice: lane.effectDevice });
@@ -48,7 +48,15 @@ export class WorkContextOrchestrator {
         this.events.append(lane.id, "failed", { state: lane.state, effectDevice: lane.effectDevice, error: error instanceof Error ? error.message : String(error) });
         throw error;
       }
-    });
+    }, queueWaitTimeoutMs); }
+    catch (error) {
+      if (error instanceof LaneQueueTimeoutError) {
+        lane.state = "failed";
+        lane.finishedAt = Date.now();
+        this.events.append(lane.id, "failed", { state: lane.state, effectDevice: lane.effectDevice, error: "upstream admission deadline expired" });
+      }
+      throw error;
+    }
   }
 
   bindEffect(laneId: string, deviceId: string) {

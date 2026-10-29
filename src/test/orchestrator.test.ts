@@ -36,3 +36,18 @@ test("parent execution lineage is preserved on the created event", () => {
   assert.equal(child.parentExecutionId, parent.id);
   assert.equal(o.events.since(child.id, 0)[0]?.parentExecutionId, parent.id);
 });
+
+test("expired upstream admission marks context failed without executing", async () => {
+  const orchestrator = new WorkContextOrchestrator(1);
+  const first = orchestrator.create();
+  let release!: () => void;
+  const inFlight = orchestrator.run(first.id, () => new Promise<void>(r => { release = r; }));
+  const second = orchestrator.create();
+  let dispatched = false;
+  await assert.rejects(orchestrator.run(second.id, async () => { dispatched = true; }, 20), /execution lane admission timed out/);
+  assert.equal(dispatched, false);
+  assert.equal(orchestrator.get(second.id)?.state, "failed");
+  release();
+  await inFlight;
+  assert.equal(orchestrator.activeCount, 0);
+});

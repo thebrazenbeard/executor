@@ -232,6 +232,11 @@ const server = http.createServer(async (req, res) => {
   if (!resolved) return json(res, 404, rpcError(payload.id, -32002, "requested workstation is not connected"));
   const { device, generation } = resolved;
   const downstreamPayload = stripDeviceId(payload);
+  // One clock for upstream, resource-key and device admission. Repeatedly
+  // starting 120s timers only after each queue would leave a request unbounded.
+  const deadlineAt = performance.now() + 120_000;
+  const remainingMs = () => Math.max(0, Math.ceil(deadlineAt - performance.now()));
+  let effectId: string | undefined;
 
   try {
     const parentHeader = req.headers["x-executor-parent-execution"];
@@ -242,39 +247,50 @@ const server = http.createServer(async (req, res) => {
     if (resourceKey && (resourceKey.length > 256 || !/^[A-Za-z0-9._:/-]+$/.test(resourceKey))) return json(res, 400, rpcError(payload.id, -32602, "invalid resource key"));
     const lane = logic.create(parentExecutionId);
     logic.bindEffect(lane.id, deviceId);
-    const effectId = randomUUID();
-    effects.create(effectId, deviceId, generation, false);
-    const dispatch = <T>(work: (device: DeviceConnection) => Promise<T>) => {
-      effects.transition(effectId, "ADMITTED");
+    const createdEffectId = randomUUID();
+    effectId = createdEffectId;
+    effects.create(createdEffectId, deviceId, generation, false);
+    const dispatch = <T>(work: (device: DeviceConnection, onDispatchAttempt: () => void) => Promise<T>) => {
+      effects.transition(createdEffectId, "ADMITTED");
       const execute = async () => {
+        if (remainingMs() <= 0) {
+          effects.transition(createdEffectId, "FAILED");
+          throw new DeviceEffectError("request admission deadline expired", "FAILED");
+        }
         const credentialStoreAvailable = reconcileAuthorizedDevices();
         const current = registry.getIfGeneration(deviceId, generation);
         if (!credentialStoreAvailable || !current) {
-          effects.transition(effectId, "FAILED");
+          effects.transition(createdEffectId, "FAILED");
           throw new Error(credentialStoreAvailable
             ? "workstation authorization changed before effect dispatch"
             : "device credential store unavailable");
         }
-        effects.transition(effectId, "DISPATCHED");
+        if (remainingMs() <= 0) {
+          effects.transition(createdEffectId, "FAILED");
+          throw new DeviceEffectError("request admission deadline expired", "FAILED");
+        }
         try {
-          const value = await work(current);
-          effects.transition(effectId, "COMPLETED");
+          const value = await work(current, () => effects.transition(createdEffectId, "DISPATCHED"));
+          effects.transition(createdEffectId, "COMPLETED");
           return value;
         } catch (error) {
-          effects.transition(effectId, error instanceof DeviceEffectError && error.disposition === "OUTCOME_UNKNOWN" ? "OUTCOME_UNKNOWN" : "FAILED");
+          effects.transition(createdEffectId, error instanceof DeviceEffectError && error.disposition === "OUTCOME_UNKNOWN" ? "OUTCOME_UNKNOWN" : "FAILED");
           throw error;
         }
       };
-      return resourceKey ? resourceGate.run(resourceKey, execute) : execute();
+      return resourceKey ? resourceGate.run(resourceKey, execute, remainingMs()) : execute();
     };
     if (isNotification(payload)) {
-      await logic.run(lane.id, () => dispatch(device => device.notify(downstreamPayload)));
+      await logic.run(lane.id, () => dispatch((device, onDispatchAttempt) => device.notify(downstreamPayload, remainingMs(), onDispatchAttempt)), remainingMs());
       res.writeHead(202, { "cache-control": "no-store" });
       return res.end();
     }
-    const response = await logic.run(lane.id, () => dispatch(device => device.request(downstreamPayload)));
+    const response = await logic.run(lane.id, () => dispatch((device, onDispatchAttempt) => device.request(downstreamPayload, remainingMs(), onDispatchAttempt)), remainingMs());
     return json(res, 200, payload.method === "tools/list" ? augmentToolsList(response) : response);
   } catch (error) {
+    // Pre-wire failures are known FAILED. A socket-send attempt is not
+    // safely replayable: absence of a response leaves OUTCOME_UNKNOWN.
+    if (effectId) effects.finalizeOnError(effectId);
     return json(res, 502, rpcError(payload.id, -32003, error instanceof Error ? error.message : "device bridge failed"));
   }
 });
