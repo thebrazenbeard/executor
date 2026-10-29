@@ -37,3 +37,20 @@ test("effect ledger evicts oldest records at its retention bound", () => {
   assert.equal(ledger.get("b")?.requestId, "b");
   assert.equal(ledger.get("c")?.requestId, "c");
 });
+
+test("failure finalization distinguishes never-sent admission from attempted remote effect", () => {
+  const ledger = new EffectLedger();
+  ledger.create("upstream-timeout", "dev", 1);
+  ledger.create("resource-timeout", "dev", 1);
+  ledger.transition("resource-timeout", "ADMITTED");
+  ledger.create("device-timeout", "dev", 1);
+  ledger.transition("device-timeout", "ADMITTED");
+  ledger.create("sent-timeout", "dev", 1);
+  ledger.transition("sent-timeout", "ADMITTED");
+  ledger.transition("sent-timeout", "DISPATCHED");
+  for (const id of ["upstream-timeout", "resource-timeout", "device-timeout"]) {
+    assert.equal(ledger.finalizeOnError(id)?.disposition, "FAILED", id);
+  }
+  assert.equal(ledger.finalizeOnError("sent-timeout")?.disposition, "OUTCOME_UNKNOWN");
+  assert.equal(ledger.finalizeOnError("sent-timeout")?.disposition, "OUTCOME_UNKNOWN");
+});

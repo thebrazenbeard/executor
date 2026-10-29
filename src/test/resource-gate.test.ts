@@ -33,3 +33,24 @@ test("same resource key serializes effects while distinct keys remain parallel",
   releaseB();
   await Promise.all([a1, a2, b]);
 });
+
+test("timed-out resource waiter never begins a delayed effect", async () => {
+  const gate = new ResourceKeyGate();
+  let release!: () => void;
+  const first = gate.run("shell:alpha", () => new Promise<void>(r => { release = r; }));
+  let secondRan = false;
+  await assert.rejects(gate.run("shell:alpha", async () => { secondRan = true; }, 20), /resource key admission timed out/);
+  assert.equal(secondRan, false);
+  release();
+  await first;
+  assert.equal(secondRan, false);
+  // A timed-out waiter must not poison the key for later legitimate work.
+  assert.equal(await gate.run("shell:alpha", async () => "fresh", 20), "fresh");
+});
+
+test("already expired resource budget cannot admit even an idle key", async () => {
+  const gate = new ResourceKeyGate();
+  let executed = false;
+  await assert.rejects(gate.run("idle-key", async () => { executed = true; }, 0), /admission timed out/);
+  assert.equal(executed, false);
+});
