@@ -55,3 +55,12 @@ test("device agent exposes safe websocket handshake state and bounds a stuck han
   assert.match(agent, /device-websocket-open/);
   assert.match(agent, /device-websocket-ready/);
 });
+
+test("device agent attaches the isolated heartbeat without hiding unknown outcomes", async () => {
+  const agent = await readFile("src/device-agent.ts", "utf8");
+  assert.match(agent, /import \{ attachConnectionHeartbeat \} from "\.\/connection-heartbeat\.js"/);
+  assert.match(agent, /attachConnectionHeartbeat\(socket, \{/);
+  assert.match(agent, /device-heartbeat-timeout/);
+  assert.match(agent, /request-outcome-unknown-after-disconnect/);
+  assert.match(agent, /pendingOutbound\.clear\(\);[\s\S]*?setTimeout\(connect, delay\);/);
+});
