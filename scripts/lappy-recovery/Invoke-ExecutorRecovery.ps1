@@ -24,9 +24,11 @@ function Write-Status([string]$state,[string]$reason) {
     tunnel_credential_present=(Test-Path -LiteralPath $credential -PathType Leaf)
     chatgpt_connector_verified=$false
   }
-  $tmp=Join-Path $repair ('health.'+[Guid]::NewGuid().ToString('N')+'.tmp')
-  $data|ConvertTo-Json -Depth 4|Set-Content -Encoding UTF8 -LiteralPath $tmp
-  Move-Item -LiteralPath $tmp -Destination $statusFile -Force
+  if(-not $ProbeOnly) {
+    $tmp=Join-Path $repair ('health.'+[Guid]::NewGuid().ToString('N')+'.tmp')
+    $data|ConvertTo-Json -Depth 4|Set-Content -Encoding UTF8 -LiteralPath $tmp
+    Move-Item -LiteralPath $tmp -Destination $statusFile -Force
+  }
   $data|ConvertTo-Json -Depth 4
   if((-not $ProbeOnly) -and $state -ne 'LOCAL_READY') {throw ('EXECUTOR_NOT_READY_'+$state)}
 }
