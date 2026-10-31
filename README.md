@@ -2,177 +2,87 @@
 
 <img src="assets/executor-icon.png" alt="Executor hooded executioner icon" width="180">
 
-**Remote full-authority workstation execution for AI clients over MCP.**
+**Self-hosted workstation execution for authorized AI clients, through the Model Context Protocol (MCP).**
 
-Executor is a remote execution bridge between an authorized AI controller and a workstation. It is derived from the WorkBridge Commander implementation, but the product boundary is intentionally simpler: **there is no bounded mode**.
+Executor connects an MCP client to one or more enrolled computers. A headless control plane receives requests, selects an authenticated device connection, and forwards the pinned Desktop Commander tool surface to that device. The control plane can remain available even when no computers are connected.
 
-Once a workstation is explicitly authorized and connected, Executor preserves the full workstation tool semantics of its pinned Desktop Commander payload: arbitrary command strings, interactive process sessions, process inspection and control, filesystem operations, progressive search, local tool history, and configuration/document tools exposed by the pinned payload.
+Executor is deliberately a **full-authority** tool. With the operator's authorization, a client can execute arbitrary commands, inspect and control processes, use interactive sessions, and read, create, edit, search, or move files. It is **not** a sandbox, restricted command runner, or permission-reduction layer. Only connect clients and computers that belong in the same explicitly approved trust relationship.
 
-## Authority model
+## How it works
 
-```text
-Principal / operator
-       |
-       | grants workstation authority
-       v
-AI controller
-       |
-       | MCP requests
-       v
-Executor control plane
-       |
-       +--> private /mcp listener <-- OpenAI Secure MCP Tunnel
-       |
-       +--> TLS-fronted /device listener
-                    |
-                    | authenticated outbound attachment
-                    v
-             Executor device agent
-       |
-       | exact MCP forwarding
-       v
-Pinned Desktop Commander payload
-       |
-       v
-Workstation
+1. An authorized MCP client reaches the control plane's private `/mcp` listener. An OpenAI Secure MCP Tunnel can expose this listener to a ChatGPT client without publishing it as a general Internet endpoint.
+2. The control plane tracks enrolled devices, connection generations, request admission, and execution outcomes.
+3. Each device agent establishes an authenticated outbound connection to the separate HTTPS/WSS `/device` ingress. The control plane forwards MCP requests to its pinned Desktop Commander payload on that computer.
+
+The private client listener and the device ingress are distinct security boundaries. A device agent does not need the OpenAI tunnel ID, tunnel API secret, or client bearer token; it uses its own enrollment credential and trusted device-ingress endpoint.
+
+### Core capabilities
+
+- **Full Desktop Commander semantics:** command execution, interactive sessions, process control, filesystem operations, and progressive search, without filtering the pinned payload's tools into a reduced API.
+- **Explicit device routing:** authenticated enrollment, device selection, and connection-generation checks. The server stays responsive when all devices are offline.
+- **Separate concurrency limits:** a configurable per-device execution-lane default of **8** and request/logic-lane default of **64**. Increasing these limits never grants additional authority.
+- **Revocation:** a per-device token file can be re-read at attachment and dispatch time and during active connections. Removing a device-specific token is not sufficient for independent revocation if a shared fallback token remains configured.
+- **Conservative failure handling:** ambiguous dispatched effects are recorded as `OUTCOME_UNKNOWN` and are not silently replayed.
+
+## Quick start (Windows control plane)
+
+Build and test from the repository root:
+
+```powershell
+npm ci --ignore-scripts
+npm test
 ```
 
-Executor is an **effect boundary**, not a permission-reduction layer. Authentication, explicit device selection, connection-generation fencing, provenance verification, scheduling, and outcome tracking protect the route. They do not silently narrow the workstation command surface after authority has been granted.
-
-## Full-authority-only invariant
-
-Executor has one execution model:
-
-- arbitrary command strings remain available through `start_process(command=...)`;
-- interactive process sessions remain available;
-- OS process inspection/control remain available;
-- filesystem read/write/edit/search semantics remain available;
-- transport components must not rename, filter, narrow, or reinterpret payload tools;
-- there is no named-executable grant mode;
-- there is no deny-by-default argument gate;
-- there is no reduced-environment substitute for the full payload;
-- there is no automatic failover or replay of mutations after ambiguous transport failure.
-
-The authorization decision is whether Executor may operate the workstation at all. Once that authority exists, Executor does not pretend to grant "full control" while quietly substituting a constrained process API.
-
-## Concurrency model
-
-Executor keeps parallel logic-lane concurrency separate from workstation-effect concurrency.
-
-- **Parallel execution lanes:** configurable per-device concurrency for workstation effects. The inherited baseline/default is 8.
-- **Parallel logic lanes:** configurable concurrent request/admission contexts. The inherited baseline/default is 64.
-- **No authority multiplication:** increasing concurrency does not create additional permissions.
-- **Resource serialization:** operations that target the same protected resource may be serialized without changing their semantic authority.
-
-## Failure semantics
-
-Executor distinguishes three important states:
-
-- **FAILED** — the effect was not dispatched or is known not to have occurred.
-- **COMPLETED** — a result was observed for the dispatched effect.
-- **OUTCOME_UNKNOWN** — the effect may have occurred, but the connection failed or timed out after dispatch.
-
-`OUTCOME_UNKNOWN` effects are never silently replayed. Reconciliation must establish current state first.
-
-## Repository lineage
-
-Executor starts from:
-
-- `thebrazenbeard/workbridgecommander` — remote MCP ingress, device attachment, lane orchestration, effect ledger, and Commander plugin surface.
-- `thebrazenbeard/workbridge` — donor research for hardened path/currentness/concurrency and relay operational lessons. Its bounded executable-grant runtime is **not** part of Executor.
-- `thebrazenbeard/WorkBridgeMCP` — donor research for exact Desktop Commander source pinning, qualification, process/session parity, and the rule that transport must not semantically narrow the workstation payload.
-
-Exact donor heads are recorded in [PROVENANCE.md](PROVENANCE.md).
-
-## Operator runtime
-
-The primary runtime is now the **headless control plane**. It starts Executor plus the OpenAI Secure MCP Tunnel and remains online with zero workstations connected:
+Configure `EXECUTOR_CLIENT_TOKEN`, `EXECUTOR_TUNNEL_ID`, and `EXECUTOR_TUNNEL_API_SECRET` in the operator's secure runtime environment, then start the headless control plane:
 
 ```powershell
 .\scripts\Start-ExecutorControlPlane.ps1
 .\scripts\Get-ExecutorControlPlaneStatus.ps1
-.\scripts\Restart-ExecutorControlPlane.ps1
-.\scripts\Stop-ExecutorControlPlane.ps1
 ```
 
-The MCP listener stays private/loopback-first for `tunnel-client`. Remote laptops use a separate device-ingress listener, normally placed behind HTTPS/WSS termination. Secure MCP Tunnel is intentionally not treated as a generic device relay.
+The headless control plane does not require a locally enrolled workstation or Desktop Commander installation. For same-machine development or a manually provisioned workstation payload, use `scripts/Install-ExecutorDesktopCommander.ps1` as described in the setup guide.
 
-To authorize a Windows laptop, generate a per-device credential on the control-plane host:
+The default MCP listener is loopback-only (`127.0.0.1:8787`); the distinct device listener defaults to `127.0.0.1:8788`. Use an authenticated HTTPS/WSS reverse proxy for remote device ingress. **Do not expose the private MCP listener as a shortcut for device enrollment.**
+
+Enroll a Windows workstation from the control-plane host:
 
 ```powershell
-.\scripts\New-ExecutorDeviceEnrollment.ps1 -DeviceId "shop-laptop" -DeviceServiceUrl "https://devices.example.com"
+.\scripts\New-ExecutorDeviceEnrollment.ps1 `
+  -DeviceId "example-workstation" `
+  -DeviceServiceUrl "https://devices.example.com"
 ```
 
-The script updates the live credential file and prints a bootstrap PowerShell command. Run that command on the target laptop. The laptop receives only its device credential and device-ingress URL—never the tunnel ID or tunnel API secret. The installer builds the Executor agent and exact pinned Desktop Commander payload, protects the device token with Windows DPAPI, registers a current-user logon task, and attaches outbound.
+The enrollment command updates the per-device credential mapping and prints a bootstrap command for that workstation. Treat the printed command as a secret. Run it only on the intended Windows computer, with `git`, `node`, and `npm` available. The agent protects its device token with Windows DPAPI and registers a current-user logon task.
 
-The older `Start-ExecutorRuntime.ps1` all-in-one server+local-device+tunnel launcher remains as a convenience for single-machine development and qualification.
+For development on a single computer, `scripts/Start-ExecutorRuntime.ps1` remains available. For an operator-managed public device endpoint, `scripts/Start-ExecutorDirect.ps1` can configure Caddy TLS termination and a direct device route; it still requires a reachable TCP path, and CGNAT or a closed router port can prevent external attachment. No third-party relay is silently substituted for an unreachable direct device path.
 
-## Active device credential revocation
+**Full installation, tunnel, certificate, networking, and qualification instructions:** [docs/SETUP.md](docs/SETUP.md).
 
-The device ingress checks the current per-device credential file when a workstation attaches, again before each downstream effect dispatch, and every second while a workstation remains connected. Rotating or removing a device token disconnects the existing attachment without restarting the control plane. If the credential store is unreadable or malformed, active device attachments are disconnected (fail closed). The existing per-device-over-shared-token precedence remains in force; removing an override can still permit the configured shared-token fallback, so do not configure a broad shared token if independent per-device revocation is required.
+## Authorization and execution outcomes
 
-A disconnected attachment cannot admit further effects, and pending requests report ambiguous outcomes rather than being replayed. **Revocation cannot undo an effect already sent to the workstation**, and idle-session cutoff is bounded by the one-second polling interval under normal scheduling. These are control-plane source semantics, not evidence of a live host rollout.
+Executor authorizes **whether** a client may operate a workstation; it does not narrow the workstation's commands after that grant. The device token store is checked on attachment and before downstream dispatch, with active-connection checks between requests. Invalid credential-store data fails closed. Revocation can stop future dispatches, but cannot undo a command already sent to a computer.
 
-## Status
+The effect ledger distinguishes:
 
-The V1 branch is qualified on Ubuntu and Windows. Windows qualification builds the exact pinned Desktop Commander payload and observed 8 active execution lanes and 64 active logic lanes while processing 64 concurrent calls.
+| State | Meaning |
+| --- | --- |
+| `FAILED` | The effect was not dispatched, or is known not to have occurred. |
+| `COMPLETED` | A result was observed for the dispatched request. For a process-start operation, a returned PID does not mean the process has exited. |
+| `OUTCOME_UNKNOWN` | Delivery or execution may have happened, but the connection failed or timed out before the outcome could be established. |
 
-See [docs/SETUP.md](docs/SETUP.md) for the self-hosted tunnel and workstation setup.
+Do not automatically retry a mutating request after `OUTCOME_UNKNOWN`. A command already dispatched may begin or finish after its caller disconnects. Executor's no-automatic-replay behavior is **not** a guarantee of exactly-once execution across manual retries or restarts.
 
-Repository qualification does not prove that a particular private tunnel or workstation is currently online. Runtime activation remains separate evidence.
+## Components and documentation
 
-## Optional Temporal chronology preview
+- [Setup and live tunnel qualification](docs/SETUP.md) — build, enrollment, credentials, direct TLS, and runtime checks.
+- [Keeper and recovery](docs/KEEPER_AND_RECOVERY.md) — optional Windows tray UI and recovery supervision for an existing installation.
+- [Temporal event projection](docs/TEMPORAL_PROJECTION.md) — optional read-only export of saved execution events.
+- [Source provenance](PROVENANCE.md) — pinned Desktop Commander and donor implementation references.
 
-An explicit, read-only projection can render saved Executor execution events as Temporal V1 NDJSON without transmitting them or modifying either log. See [Temporal projection contract](docs/TEMPORAL_PROJECTION.md). It does not export arbitrary execution payloads, establish effect success, or enable automatic replication.
+Executor draws on `thebrazenbeard/workbridgecommander`, `thebrazenbeard/workbridge`, and `thebrazenbeard/WorkBridgeMCP`. Their provenance does not imply that WorkBridge's bounded executable-grant mode is present in Executor.
 
+## Verification and deployment boundary
 
-## Zero-cost, no-relay device ingress
+Repository tests and CI cover source behavior, Windows and Ubuntu builds, the pinned Desktop Commander payload, and selected TLS/device-ingress scenarios. A passing check does **not** establish that any particular workstation is enrolled, that a private tunnel is currently reachable, or that a candidate repair is installed.
 
-Executor's primary remote-device path is direct TLS. There is no Cloudflare/Tailscale/ngrok/VPS relay in the device traffic path and therefore no third-party per-request, in-flight-request, or relay-bandwidth quota.
-
-On the control-plane Windows machine:
-
-```powershell
-.\scripts\Start-ExecutorDirect.ps1 `
-  -OpenAITunnelCredentialsFile "C:\path\to\executor keys.txt" `
-  -DeviceId "test-laptop"
-```
-
-The command:
-
-- starts the zero-device-capable Executor control plane and OpenAI Secure MCP Tunnel;
-- automatically downloads the current official OpenAI `tunnel-client` Windows release when it is not already available, verifies the archive against OpenAI's published `SHA256SUMS.txt`, and caches the verified binary locally;
-- resolves the public IPv4 address unless `-PublicHost` is supplied;
-- downloads Caddy from its official GitHub release only when needed and verifies the release archive against the official SHA-512 checksum file;
-- keeps Caddy's CA under Executor's persistent runtime directory and does not install that CA into the host-wide trust store;
-- terminates direct TLS on TCP 9443 by default and proxies only `/device` and `/health` to the loopback device listener;
-- attempts a Windows Firewall rule and UPnP TCP mapping;
-- emits an exact-commit-pinned enrollment command containing the public CA certificate and that device's credential.
-
-The enrolled device trusts only the supplied Executor/Caddy CA for this connection; the CA private key never leaves the control-plane host.
-
-Runtime controls:
-
-```powershell
-.\scripts\Get-ExecutorDirectStatus.ps1
-.\scripts\Restart-ExecutorDirect.ps1
-.\scripts\Stop-ExecutorDirect.ps1
-```
-
-An already-installed laptop can be pointed at a changed public address without changing its identity, DPAPI-protected credential, or CA:
-
-```powershell
-.\scripts\Set-ExecutorInstalledDeviceEndpoint.ps1 -ServiceUrl "https://203.0.113.10:9443"
-```
-
-### Network boundary
-
-Direct ingress requires an actually reachable public IPv4/TCP path. If UPnP is unavailable, forward the chosen TCP port on the router to the Executor host. If the ISP places the site behind CGNAT and provides no directly reachable address, Executor cannot make inbound direct connectivity appear without introducing a relay; under the no-rate-limited-relay requirement it reports that as a deployment blocker instead of silently falling back.
-
-Repository CI now exercises a real Caddy internal-CA TLS boundary and WSS device hello on Windows in addition to the exact pinned Desktop Commander 8/64 qualification. A particular home/work router and ISP path remain separate runtime evidence.
-
-## Lappy recovery and optional Keeper tray
-The repository also includes the supervised gateway recovery scripts and optional .NET 10 Windows Keeper tray introduced through PRs #10 and #11. See [Keeper and recovery](docs/KEEPER_AND_RECOVERY.md) and [recovery validation evidence](docs/LAPPY_EXECUTOR_RECOVERY_20261013.md). These complement the agent and control plane; they do not replace them.
-
-## Deployment and security boundary
-Source tests and Windows CI do not prove that a host is enrolled, the tunnel works, or a production service is deployed. Do not check in device credentials, DPAPI blobs, private local state, certificates or tokens. Installation, credential changes and cutover require separate authorization and readback.
+Keep device credentials, tunnel identifiers and secrets, DPAPI blobs, private certificates, and runtime state out of Git. Verify installed artifact identity, host authorization, routing, recovery state, and rollback before production changes. Treat installation, credential rotation, tunnel cutover, and deployment as separate operator-approved actions.
