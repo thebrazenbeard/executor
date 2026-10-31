@@ -1,5 +1,7 @@
 # Executor
 
+<img src="assets/executor-icon.png" alt="Executor hooded executioner icon" width="180">
+
 **Remote full-authority workstation execution for AI clients over MCP.**
 
 Executor is a remote execution bridge between an authorized AI controller and a workstation. It is derived from the WorkBridge Commander implementation, but the product boundary is intentionally simpler: **there is no bounded mode**.
