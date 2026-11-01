@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type WebSocket from "ws";
 import type { DeviceRequest, DeviceResponse, JsonRpc } from "./protocol.js";
-import { LanePool } from "./lanes.js";
+import { LanePool, LaneQueueTimeoutError } from "./lanes.js";
 
 export class DeviceEffectError extends Error {
   constructor(message: string, readonly disposition: "FAILED" | "OUTCOME_UNKNOWN") { super(message); this.name = "DeviceEffectError"; }
@@ -35,31 +35,96 @@ export class DeviceConnection {
     p.resolve(message.payload);
   }
 
-  notify(payload: JsonRpc): Promise<void> {
+  notify(payload: JsonRpc, timeoutMs = 120_000, onDispatchAttempt?: () => void): Promise<void> {
+    const started = performance.now();
     return this.execution.run(() => new Promise<void>((resolve, reject) => {
       if (this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device socket is not open", "FAILED"));
+      const remaining = timeoutMs - (performance.now() - started);
+      if (remaining <= 0) return reject(new DeviceEffectError("device admission deadline expired", "FAILED"));
+      let settled = false;
+      const timer = setTimeout(() => {
+        settled = true;
+        reject(new DeviceEffectError("device notification send timed out", "OUTCOME_UNKNOWN"));
+      }, remaining);
       const wire: DeviceRequest = { type: "request", requestId: randomUUID(), payload };
-      this.socket.send(JSON.stringify(wire), err => err ? reject(new DeviceEffectError(err.message, "OUTCOME_UNKNOWN")) : resolve());
-    }));
+      let encoded: string;
+      try { encoded = JSON.stringify(wire); }
+      catch {
+        settled = true;
+        clearTimeout(timer);
+        return reject(new DeviceEffectError("device payload serialization failed", "FAILED"));
+      }
+      try { onDispatchAttempt?.(); }
+      catch {
+        settled = true;
+        clearTimeout(timer);
+        return reject(new DeviceEffectError("device dispatch marker failed", "FAILED"));
+      }
+      try {
+        this.socket.send(encoded, err => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          return err ? reject(new DeviceEffectError("device socket send failed", "OUTCOME_UNKNOWN")) : resolve();
+        });
+      } catch {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(new DeviceEffectError("device socket send threw", "OUTCOME_UNKNOWN"));
+        }
+      }
+    }), timeoutMs).catch(error => {
+      if (error instanceof LaneQueueTimeoutError) throw new DeviceEffectError("device admission deadline expired", "FAILED");
+      throw error;
+    });
   }
 
-  request(payload: JsonRpc, timeoutMs = 120_000): Promise<JsonRpc> {
+  request(payload: JsonRpc, timeoutMs = 120_000, onDispatchAttempt?: () => void): Promise<JsonRpc> {
+    const started = performance.now();
     return this.execution.run(() => new Promise<JsonRpc>((resolve, reject) => {
       if (this.socket.readyState !== this.socket.OPEN) return reject(new DeviceEffectError("device socket is not open", "FAILED"));
+      // The deadline includes time queued for a device lane. A request that
+      // never reached the socket is a known FAILED admission, not an unknown
+      // remote effect. Once dispatched, a timeout remains OUTCOME_UNKNOWN.
+      const remaining = timeoutMs - (performance.now() - started);
+      if (remaining <= 0) return reject(new DeviceEffectError("device admission deadline expired", "FAILED"));
       const requestId = randomUUID();
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
         reject(new DeviceEffectError("device request timed out", "OUTCOME_UNKNOWN"));
-      }, timeoutMs);
+      }, remaining);
       this.pending.set(requestId, { resolve, reject, timer });
       const wire: DeviceRequest = { type: "request", requestId, payload };
-      this.socket.send(JSON.stringify(wire), err => {
-        if (!err) return;
+      let encoded: string;
+      try { encoded = JSON.stringify(wire); }
+      catch {
         clearTimeout(timer);
         this.pending.delete(requestId);
-        reject(new DeviceEffectError(err.message, "OUTCOME_UNKNOWN"));
-      });
-    }));
+        return reject(new DeviceEffectError("device payload serialization failed", "FAILED"));
+      }
+      try { onDispatchAttempt?.(); }
+      catch {
+        clearTimeout(timer);
+        this.pending.delete(requestId);
+        return reject(new DeviceEffectError("device dispatch marker failed", "FAILED"));
+      }
+      try {
+        this.socket.send(encoded, err => {
+          if (!err) return;
+          clearTimeout(timer);
+          this.pending.delete(requestId);
+          reject(new DeviceEffectError("device socket send failed", "OUTCOME_UNKNOWN"));
+        });
+      } catch {
+        clearTimeout(timer);
+        this.pending.delete(requestId);
+        reject(new DeviceEffectError("device socket send threw", "OUTCOME_UNKNOWN"));
+      }
+    }), timeoutMs).catch(error => {
+      if (error instanceof LaneQueueTimeoutError) throw new DeviceEffectError("device admission deadline expired", "FAILED");
+      throw error;
+    });
   }
 
   get activeCount() { return this.execution.activeCount; }

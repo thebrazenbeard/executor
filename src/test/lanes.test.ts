@@ -22,3 +22,18 @@ test("LanePool obeys configured runtime capacity without encoding a product ceil
   await Promise.all(jobs);
   assert.equal(pool.activeCount, 0);
 });
+
+test("queued admission expires without dispatching work after capacity frees", async () => {
+  const pool = new LanePool(1);
+  let release!: () => void;
+  const gate = new Promise<void>(r => { release = r; });
+  const first = pool.run(() => gate);
+  let dispatched = false;
+  await assert.rejects(pool.run(async () => { dispatched = true; }, 15), /admission timed out/);
+  assert.equal(dispatched, false);
+  assert.equal(pool.queuedCount, 0);
+  release();
+  await first;
+  assert.equal(pool.activeCount, 0);
+  assert.equal(dispatched, false);
+});

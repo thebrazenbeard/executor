@@ -40,6 +40,15 @@ export class EffectLedger {
     return record;
   }
 
+  /** A known pre-wire admission failure is not an ambiguous remote effect. */
+  finalizeOnError(requestId: string): EffectRecord | undefined {
+    const record = this.records.get(requestId);
+    if (!record) return undefined;
+    if (record.disposition === "QUEUED" || record.disposition === "ADMITTED") return this.transition(requestId, "FAILED");
+    if (record.disposition === "DISPATCHED") return this.transition(requestId, "OUTCOME_UNKNOWN");
+    return record;
+  }
+
   get(requestId: string) { return this.records.get(requestId); }
   recent(limit = 100) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error("effect ledger limit must be 1..1000");
