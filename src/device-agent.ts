@@ -6,6 +6,7 @@ import WebSocket from "ws";
 import type { DeviceRequest, JsonRpc } from "./protocol.js";
 import { assertSafeDeviceServiceUrl, resolveInsideRoot, trustedSha256Matches } from "./security.js";
 import { payloadEnvironment } from "./payload-env.js";
+import { attachConnectionHeartbeat } from "./connection-heartbeat.js";
 
 const serviceUrl = process.env.EXECUTOR_SERVICE_URL ?? "";
 const token = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
@@ -172,6 +173,10 @@ function connect() {
       : {})
   });
   ws = socket;
+
+  attachConnectionHeartbeat(socket, {
+    onTimeout: () => console.error(JSON.stringify({ status: "device-heartbeat-timeout" }))
+  });
 
   socket.on("open", () => {
     console.error(JSON.stringify({ status: "device-websocket-open" }));
