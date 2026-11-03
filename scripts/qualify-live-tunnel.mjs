@@ -1,13 +1,14 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { hasExactProbeOutput, newProbeCommand } from "./probe-receipt.mjs";
 
 const remoteMcpUrl = process.env.EXECUTOR_REMOTE_MCP_URL?.trim();
 const remoteAuthorization = process.env.EXECUTOR_REMOTE_AUTHORIZATION?.trim();
 const deviceId = process.env.EXECUTOR_REMOTE_DEVICE_ID?.trim();
 const localHealthUrl = (process.env.EXECUTOR_LOCAL_HEALTH_URL ?? "http://127.0.0.1:8787/health").trim();
 const localClientToken = process.env.EXECUTOR_CLIENT_TOKEN?.trim();
-const probeCommand = process.env.EXECUTOR_REMOTE_PROBE_COMMAND?.trim()
-  || 'powershell -NoProfile -Command "Start-Sleep -Milliseconds 1500; Write-Output EXECUTOR_TUNNEL_LANE_OK"';
+const probeTemplate = process.env.EXECUTOR_REMOTE_PROBE_COMMAND?.trim()
+  || 'powershell -NoProfile -Command "Start-Sleep -Milliseconds 1500; Write-Output {probe_nonce}"';
 
 if (!remoteMcpUrl) throw new Error("EXECUTOR_REMOTE_MCP_URL is required");
 if (!deviceId) throw new Error("EXECUTOR_REMOTE_DEVICE_ID is required");
@@ -44,6 +45,7 @@ let maxLogicActive = 0;
 let maxLogicQueued = 0;
 let capacityMismatch = false;
 let samples = 0;
+const observedProbeMarkers = new Set();
 
 const healthHeaders = {
   authorization: `Bearer ${localClientToken}`
@@ -81,11 +83,12 @@ try {
     throw new Error("remote Executor endpoint does not expose start_process");
   }
 
-  const calls = Array.from({ length: 64 }, (_, index) =>
-    client.callTool({
+  const calls = Array.from({ length: 64 }, (_, index) => {
+    const { command, marker } = newProbeCommand(probeTemplate, index);
+    return client.callTool({
       name: "start_process",
       arguments: {
-        command: probeCommand,
+        command,
         timeout_ms: 5000,
         deviceId
       }
@@ -93,9 +96,13 @@ try {
       if (result.isError) {
         throw new Error(`remote call ${index + 1} returned an MCP tool error`);
       }
+      if (!hasExactProbeOutput(result, marker)) {
+        throw new Error(`remote call ${index + 1} did not return its operation-bound probe stdout`);
+      }
+      observedProbeMarkers.add(marker);
       return result;
-    })
-  );
+    });
+  });
 
   await Promise.all(calls);
 } finally {
@@ -105,6 +112,7 @@ try {
 }
 
 if (samples === 0) throw new Error("no authenticated local /health samples were observed");
+if (observedProbeMarkers.size !== 64) throw new Error("operation-bound probe stdout count below target");
 if (capacityMismatch) throw new Error("runtime capacity is not 8 execution / 64 logic lanes");
 if (maxExecutionActive < 8) {
   throw new Error(`live tunnel execution overlap below target: maxExecutionActive=${maxExecutionActive}`);
@@ -119,6 +127,9 @@ console.log(JSON.stringify({
   remoteEndpoint: "configured-at-runtime",
   deviceId,
   calls: 64,
+  operationBoundStdoutReceipts: observedProbeMarkers.size,
+  receiptRole: "TOOL_STDOUT_WITNESS_NOT_INDEPENDENT_HOST_PROCESS_ATTESTATION",
+  capacityEvidenceRole: "AUTHENTICATED_LOCAL_SHARED_COUNTERS_NOT_PER_OPERATION_ATTESTATION",
   samples,
   maxExecutionActive,
   maxExecutionQueued,
