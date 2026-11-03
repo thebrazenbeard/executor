@@ -113,7 +113,9 @@ $env:EXECUTOR_REMOTE_AUTHORIZATION = "Bearer <runtime-only-credential>"
 npm run qualify:live-tunnel
 ```
 
-The qualifier sends 64 concurrent `start_process` calls through `EXECUTOR_REMOTE_MCP_URL` and samples the authenticated local Executor `/health` counters using the already configured `EXECUTOR_CLIENT_TOKEN`. It passes only if the live path observes at least 8 simultaneous execution effects and 64 simultaneous logic lanes.
+The qualifier sends 64 concurrent `start_process` calls through `EXECUTOR_REMOTE_MCP_URL`, each with an unpredictable, operation-specific stdout marker. It rejects a successful MCP response unless its text contains that call's exact marker on a complete output line. It also samples authenticated local Executor `/health` counters using the already configured `EXECUTOR_CLIENT_TOKEN`. It passes only with all 64 bound stdout receipts, at least 8 simultaneous execution effects, and 64 simultaneous logic lanes. If overriding `EXECUTOR_REMOTE_PROBE_COMMAND`, include exactly one literal `{probe_nonce}` placeholder and ensure the command prints its substituted value as a standalone line. Unbound success messages fail closed.
+
+These receipts establish what the authenticated MCP route *reported* for the selected device and request; a dishonest endpoint could forge an echoed marker. The 8/64 health counters are shared process-level activity and are not cryptographically bound to the 64 requests. Neither independently authenticates the host process owner, installed source SHA, or remote server's honesty. Correlate host process identity and artifact hashes separately before claiming an installed-host qualification.
 
 `EXECUTOR_REMOTE_AUTHORIZATION` is optional and is never written to repository state. Credentials embedded directly in the remote URL are rejected; use the authorization variable instead when the endpoint requires a header. Loopback and plaintext URLs are also rejected so local traffic cannot be mislabeled as live-tunnel evidence. The harness is deliberately excluded from ordinary GitHub Actions because CI does not possess your live tunnel identity or credentials.
 
