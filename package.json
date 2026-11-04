@@ -7,15 +7,17 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node init && tsc -p tsconfig.json",
     "test": "npm run build && node scripts/run-tests.mjs",
-    "start": "node dist/server.js",
+    "start": "node init && node dist/server.js",
     "device": "node dist/device-agent.js",
     "test:unit": "node scripts/run-tests.mjs",
     "audit": "npm audit --audit-level=high",
     "qualify:live-tunnel": "node scripts/qualify-live-tunnel.mjs"
   },
   "dependencies": {
+    "dotenv": "^8.2.0",
+    "node-fetch": "^3.3.2",
     "ws": "8.22.0"
   },
   "devDependencies": {
