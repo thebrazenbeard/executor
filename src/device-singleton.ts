@@ -7,7 +7,9 @@ export function deviceSingletonIdentifier(serviceUrl: string, deviceId: string):
   // The device agent replaces any supplied input path with /device before
   // connecting. Payload roots and input paths can change without changing the
   // actual service/device identity, so neither belongs in the key.
-  const material = JSON.stringify([route.origin, deviceId.toLowerCase()]);
+  // Auth tokens and the server registry use exact-case device IDs. Keep their
+  // semantics here: "Lappy" and "lappy" can be distinct registered devices.
+  const material = JSON.stringify([route.origin, deviceId]);
   return createHash("sha256")
     .update(material)
     .digest("hex")

@@ -97,6 +97,20 @@ test("distinct device identities can run together", { skip: unsupported }, async
   }
 });
 
+test("case-distinct device IDs can bind concurrently", { skip: unsupported }, async () => {
+  const origin = "https://server.example/device";
+  const upper = await startProbe(deviceSingletonIdentifier(origin, "Lappy"));
+  let lower: Awaited<ReturnType<typeof startProbe>> | undefined;
+  try {
+    lower = await startProbe(deviceSingletonIdentifier(origin, "lappy"));
+    assert.equal(upper.line, "READY");
+    assert.equal(lower.line, "READY");
+  } finally {
+    await stopProbe(upper.child);
+    if (lower) await stopProbe(lower.child);
+  }
+});
+
 test("singleton identity rejects unbounded or path-like values", async () => {
   await assert.rejects(acquireDeviceSingleton("../not-a-hash"), /invalid Executor device singleton identifier/);
   await assert.rejects(acquireDeviceSingleton("a".repeat(33)), /invalid Executor device singleton identifier/);
@@ -104,7 +118,7 @@ test("singleton identity rejects unbounded or path-like values", async () => {
 
 test("installed and direct device-agent share service-device identity across payload upgrades", () => {
   const a = deviceSingletonIdentifier("https://SERVER.example:443/device?token=not-for-pipe", "Lappy");
-  const b = deviceSingletonIdentifier("https://server.example/device", "lappy");
+  const b = deviceSingletonIdentifier("https://server.example/device", "Lappy");
   assert.equal(a, b);
   assert.match(a, /^[a-f0-9]{32}$/);
   // No payload root enters the key, so a versioned upgrade cannot double-own.
@@ -112,4 +126,5 @@ test("installed and direct device-agent share service-device identity across pay
   // Both input paths are rewritten to /device by device-agent.ts.
   assert.equal(a, deviceSingletonIdentifier("https://server.example/other-device-route", "Lappy"));
   assert.notEqual(a, deviceSingletonIdentifier("https://server.example/device", "VN1"));
+  assert.notEqual(a, deviceSingletonIdentifier("https://server.example/device", "lappy"));
 });
