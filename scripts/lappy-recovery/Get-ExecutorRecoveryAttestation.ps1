@@ -4,6 +4,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$CanonicalScriptPath,
   [Parameter(Mandatory = $true)][string]$ExpectedCanonicalSha256,
+  [Parameter(Mandatory = $true)][string]$ExpectedTaskUserId,
   [string]$RuntimeRoot = (Join-Path $env:LOCALAPPDATA 'Executor')
 )
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,7 @@ function Get-ExecutorRecoveryAttestation {
   param(
     [string]$CanonicalScriptPath,
     [string]$ExpectedCanonicalSha256,
+    [string]$ExpectedTaskUserId,
     [string]$RuntimeRoot
   )
   $name = 'Vera-Executor-ControlPlane-Recovery'
@@ -23,9 +25,17 @@ function Get-ExecutorRecoveryAttestation {
     canonical_source_pinned = $false
     installed_script_matches_source = $false
     exact_root_task = $false
+    exact_task_principal = $false
+    interactive_logon_type = $false
     limited_run_level = $false
     exact_executable = $false
     exact_arguments = $false
+    exact_logon_trigger = $false
+    exact_five_minute_trigger = $false
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ExpectedTaskUserId)) {
+    $issues.Add('EXPECTED_TASK_PRINCIPAL_UNAVAILABLE')
   }
 
   if ([string]::IsNullOrWhiteSpace($RuntimeRoot)) {
@@ -92,6 +102,14 @@ function Get-ExecutorRecoveryAttestation {
     } else {
       $checks.exact_root_task = $true
       $task = $tasks[0]
+      if (-not [string]::IsNullOrWhiteSpace($ExpectedTaskUserId) -and
+          [string]::Equals([string]$task.Principal.UserId, $ExpectedTaskUserId,
+                           [StringComparison]::OrdinalIgnoreCase)) {
+        $checks.exact_task_principal = $true
+      } else { $issues.Add('TASK_PRINCIPAL_USER_MISMATCH') }
+      if ([string]$task.Principal.LogonType -ceq 'Interactive') {
+        $checks.interactive_logon_type = $true
+      } else { $issues.Add('TASK_PRINCIPAL_LOGON_TYPE_MISMATCH') }
       if ([string]$task.Principal.RunLevel -ne 'Limited') {
         $issues.Add('TASK_RUN_LEVEL_NOT_LIMITED')
       } else { $checks.limited_run_level = $true }
@@ -113,6 +131,23 @@ function Get-ExecutorRecoveryAttestation {
           } else { $issues.Add('TASK_ARGUMENTS_MISMATCH') }
         } else { $issues.Add('TASK_ARGUMENT_EXPECTATION_UNAVAILABLE') }
       }
+      $triggers = @($task.Triggers)
+      $logonTriggers = @($triggers | Where-Object { $_.CimClass.CimClassName -ceq 'MSFT_TaskLogonTrigger' })
+      $timeTriggers = @($triggers | Where-Object { $_.CimClass.CimClassName -ceq 'MSFT_TaskTimeTrigger' })
+      if ($triggers.Count -ne 2 -or $logonTriggers.Count -ne 1 -or $timeTriggers.Count -ne 1) {
+        $issues.Add('TASK_TRIGGER_TOPOLOGY_MISMATCH')
+      } else {
+        if ($logonTriggers[0].Enabled -and
+            -not [string]::IsNullOrWhiteSpace($ExpectedTaskUserId) -and
+            [string]::Equals([string]$logonTriggers[0].UserId, $ExpectedTaskUserId,
+                             [StringComparison]::OrdinalIgnoreCase)) {
+          $checks.exact_logon_trigger = $true
+        } else { $issues.Add('TASK_LOGON_TRIGGER_USER_OR_ENABLED_MISMATCH') }
+        if ($timeTriggers[0].Enabled -and
+            [string]$timeTriggers[0].Repetition.Interval -ceq 'PT5M') {
+          $checks.exact_five_minute_trigger = $true
+        } else { $issues.Add('TASK_REPETITION_TRIGGER_MISMATCH') }
+      }
     }
   } catch { $issues.Add('TASK_QUERY_UNAVAILABLE') }
 
@@ -122,11 +157,14 @@ function Get-ExecutorRecoveryAttestation {
     safe_to_start = $false
     task_name = $name
     source_pin_origin = 'OPERATOR_SUPPLIED_NOT_AUTHENTICATED'
+    expected_principal_origin = 'OPERATOR_SUPPLIED_NOT_AUTHENTICATED'
+    ancestor_reparse_chain_verified = $false
     checks = $checks
     issues = @($issues)
   }
 }
 
 Get-ExecutorRecoveryAttestation -CanonicalScriptPath $CanonicalScriptPath `
-  -ExpectedCanonicalSha256 $ExpectedCanonicalSha256 -RuntimeRoot $RuntimeRoot |
+  -ExpectedCanonicalSha256 $ExpectedCanonicalSha256 `
+  -ExpectedTaskUserId $ExpectedTaskUserId -RuntimeRoot $RuntimeRoot |
   ConvertTo-Json -Depth 6
