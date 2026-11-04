@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 test("device agent supports an operator-owned CA for direct WSS", async () => {
   const agent = await readFile("src/device-agent.ts", "utf8");
@@ -124,16 +127,55 @@ test("direct runtime validates an existing router mapping before treating it as 
   assert.match(start, /mapping conflict/i);
 });
 
-test("Windows device reinstall terminates the prior installed device process tree before replacing payload", async () => {
+test("Windows device installer refuses an existing runtime without terminating processes or replacing credentials", async () => {
   const install = await readFile("scripts/Install-ExecutorDevice.ps1", "utf8");
 
-  assert.match(install, /function\s+Stop-ExistingInstalledDeviceProcesses/i);
-  assert.match(install, /Get-CimInstance\s+Win32_Process/i);
-  assert.match(install, /Stop-Process\s+-Id/i);
+  assert.match(install, /function\s+Assert-FreshInstallTargets/i);
+  assert.match(install, /EXISTING_EXECUTOR_INSTALL/i);
+  assert.equal(/Stop-ExistingInstalledDeviceProcesses|Stop-Process\s+-Id|Stop-ScheduledTask/i.test(install), false);
+  assert.equal(/Remove-Item[^\n]*\$backup|AgentRoot\.backup\./i.test(install), false);
+  assert.match(install, /FileMode\]::CreateNew/i);
 
-  const definition = install.indexOf("function Stop-ExistingInstalledDeviceProcesses");
-  const cleanupCall = install.indexOf("Stop-ExistingInstalledDeviceProcesses", definition + 1);
-  const payloadInstall = install.indexOf("Install-ExecutorDesktopCommander.ps1");
-  assert.ok(cleanupCall > definition, "installer must invoke the installed-device cleanup helper");
-  assert.ok(cleanupCall < payloadInstall, "old installed-device processes must be stopped before payload replacement");
+  const initialGuard = install.indexOf("\nAssert-FreshInstallTargets\n");
+  const firstClone = install.indexOf("& $git clone");
+  const firstCredentialWrite = install.indexOf("WriteNewFileBytes -Path $credentialPath");
+  assert.ok(initialGuard > 0 && initialGuard < firstClone, "existing installation must be rejected before cloning");
+  assert.ok(firstCredentialWrite > firstClone, "new credential is only written for a fresh install after source qualification");
+  assert.match(install, /Install-ExecutorDesktopCommander\.ps1"\) -InstallRoot \$payloadCandidate/);
+  assert.match(install, /\[IO\.Directory\]::Move\(\$payloadCandidate,\$PayloadRoot\)/);
+  assert.equal(/Register-ScheduledTask[^\n]*-Force/.test(install), false);
+});
+
+test("Windows bootstrap refuses an existing agent before any file/process/task mutation", { skip: process.platform !== "win32" }, async () => {
+  const runtime = await mkdtemp(join(tmpdir(), "executor-fresh-only-test-"));
+  const agent = join(runtime, "Agent");
+  const payload = join(runtime, "DesktopCommanderMCP");
+  const token = join(runtime, "device-token.dpapi");
+  const config = join(runtime, "device.json");
+  const marker = join(agent, "owner-marker.txt");
+  const script = resolve("scripts", "Install-ExecutorDevice.ps1");
+  const taskName = `Executor FreshOnly Test ${Date.now()}-${process.pid}`;
+  try {
+    await mkdir(agent);
+    await writeFile(marker, "owned agent: must remain untouched\n");
+    await writeFile(token, "owned credentials: must remain untouched\n");
+    await writeFile(config, "owned config: must remain untouched\n");
+
+    const result = spawnSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script,
+      "-ServiceUrl", "https://example.invalid", "-DeviceId", "test-device",
+      "-DeviceToken", "synthetic-test-token", "-RuntimeRoot", runtime,
+      "-AgentRoot", agent, "-PayloadRoot", payload, "-TaskName", taskName,
+    ], { encoding: "utf8", timeout: 15000 });
+
+    assert.equal(result.error, undefined, String(result.error));
+    assert.notEqual(result.status, 0, "existing runtime must fail closed");
+    assert.match(`${result.stdout}\n${result.stderr}`, /EXISTING_EXECUTOR_INSTALL/);
+    assert.equal(await readFile(marker, "utf8"), "owned agent: must remain untouched\n");
+    assert.equal(await readFile(token, "utf8"), "owned credentials: must remain untouched\n");
+    assert.equal(await readFile(config, "utf8"), "owned config: must remain untouched\n");
+    await assert.rejects(readFile(join(runtime, "DesktopCommanderMCP", "executor-desktop-commander.manifest.json")));
+  } finally {
+    await rm(runtime, { recursive: true, force: true });
+  }
 });

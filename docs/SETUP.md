@@ -59,6 +59,13 @@ Run the printed command in PowerShell on the laptop. The current Windows bootstr
 5. registers a current-user `Executor Device` logon task; and
 6. starts the device agent immediately.
 
+This bootstrap is **fresh-install only**. If an Executor Agent, Desktop Commander
+payload, device configuration/credential, CA file, or matching scheduled task
+already exists, it refuses with `EXISTING_EXECUTOR_INSTALL` before fetching or
+changing files or processes. Do not rerun the enrollment bootstrap as a repair
+or upgrade: qualify a separate maintenance procedure that preserves the existing
+installation and credentials.
+
 The laptop does not need the OpenAI tunnel ID, runtime API secret, or Executor client bearer. It needs only the TLS device-ingress URL, its device ID, and its own device credential.
 
 Connected devices are visible from the ChatGPT Executor MCP surface through `list_devices`. Executor remains connectable and exposes `list_devices` when all workstation agents are offline.
