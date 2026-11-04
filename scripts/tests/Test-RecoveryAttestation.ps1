@@ -62,7 +62,7 @@ try {
   $ok = Run-Fixture $pin
   if ($ok.status -ne 'SOURCE_TASK_MATCH_NOT_RUNTIME_QUALIFIED' -or
       $ok.safe_to_start -ne $false -or @($ok.issues).Count -ne 0) {
-    throw 'Expected exact synthetic source/task agreement without runtime qualification.'
+    throw ('Expected exact synthetic source/task agreement without runtime qualification. Actual: ' + ($ok | ConvertTo-Json -Depth 6 -Compress))
   }
   Write-Output 'PASS exact source/task fixture remains NOT_RUNTIME_QUALIFIED'
 
