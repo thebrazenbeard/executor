@@ -6,6 +6,7 @@ import WebSocket from "ws";
 import type { DeviceRequest, JsonRpc } from "./protocol.js";
 import { assertSafeDeviceServiceUrl, resolveInsideRoot, trustedSha256Matches } from "./security.js";
 import { payloadEnvironment } from "./payload-env.js";
+import { acquireDeviceSingleton, deviceSingletonIdentifier } from "./device-singleton.js";
 
 const serviceUrl = process.env.EXECUTOR_SERVICE_URL ?? "";
 const token = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
@@ -49,6 +50,17 @@ const entrypoint = resolveInsideRoot(installRoot, manifest.entrypoint_relative);
 if (await sha256(nodeExe) !== manifest.node_sha256.toLowerCase()) throw new Error("packaged Node hash mismatch");
 if (await sha256(entrypoint) !== manifest.entrypoint_sha256.toLowerCase()) throw new Error("Desktop Commander entrypoint hash mismatch");
 if (!manifest.mcp_args.length || path.normalize(manifest.mcp_args[0]) !== path.normalize(manifest.entrypoint_relative)) throw new Error("manifest mcp_args do not bind the qualified entrypoint");
+
+// The scheduled-task PowerShell mutex is owned by its wrapper, not this agent.
+// An interrupted wrapper can leave a live agent and MCP child behind. Bind the
+// identity in the Windows agent before spawning another MCP child. Derive the
+// same identity for both installed and direct invocation; an environment
+// override would permit two owners for the same device.
+// Keep Linux's existing behavior pending separate kernel-socket qualification.
+if (process.platform === "win32") {
+  const singletonId = deviceSingletonIdentifier(serviceUrl, deviceId);
+  await acquireDeviceSingleton(singletonId);
+}
 
 console.error(JSON.stringify({ status: "qualified-payload-spawn-start" }));
 const child = spawn(nodeExe, manifest.mcp_args, {
