@@ -61,7 +61,10 @@ $log = Join-Path $logRoot ("device-" + ([string]$config.device_id) + ".log")
 $stdoutLog = Join-Path $logRoot ("device-" + ([string]$config.device_id) + ".out.log")
 try {
   $agentArgument = '"' + $agent + '"'
-  $process = Start-Process -FilePath $node -ArgumentList $agentArgument -WorkingDirectory ([string]$config.agent_root) -PassThru -Wait -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $log
+  # Wait for the direct device agent only. Start-Process -Wait can also wait for
+  # descendant terminal/browser workloads after that agent has exited.
+  $process = Start-Process -FilePath $node -ArgumentList $agentArgument -WorkingDirectory ([string]$config.agent_root) -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $log
+  $process.WaitForExit()
   exit $process.ExitCode
 }
 finally {
