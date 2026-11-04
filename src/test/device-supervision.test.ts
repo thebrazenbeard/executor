@@ -2,17 +2,38 @@ import assert from "node:assert/strict";
 import { createServer } from "node:net";
 import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { deviceSingletonIdentifier } from "../device-singleton.js";
 import {
   classifyDeviceSupervision,
+  parseScheduledTaskObservation,
   probeWindowsDeviceLease,
   type LeaseObservation,
   type TaskObservation
 } from "../device-supervision.js";
+
+test("only a single exact root scheduled task can yield a running verdict", () => {
+  const root = { TaskName: "Executor Device", TaskPath: "\\", State: "Running" };
+  const other = { TaskName: "Executor Device", TaskPath: "\\Injected\\", State: "Ready" };
+  assert.equal(parseScheduledTaskObservation([root]), "running");
+  assert.equal(parseScheduledTaskObservation([{ ...root, State: "Ready" }]), "not-running");
+  assert.equal(parseScheduledTaskObservation([root, other]), "unknown");
+  assert.equal(parseScheduledTaskObservation([other, root]), "unknown");
+  assert.equal(parseScheduledTaskObservation([other]), "unknown");
+  assert.equal(parseScheduledTaskObservation([root, root]), "unknown");
+  assert.equal(parseScheduledTaskObservation([{ ...root, State: "Queued" }]), "unknown");
+  assert.equal(parseScheduledTaskObservation([{ ...root, State: 4 }]), "unknown");
+  assert.equal(parseScheduledTaskObservation(null), "unknown");
+});
+
+test("observer script has an absolute Windows PowerShell pin, never PATH resolution", () => {
+  const source = readFileSync(path.resolve("scripts", "probe-device-supervision.mjs"), "utf8");
+  assert.match(source, /const powerShell = "C:\\\\Windows\\\\System32/);
+  assert.doesNotMatch(source, /spawnSync\(\s*["']powershell\.exe["']/);
+});
 
 test("running task and reachable pipe is only provisional supervision evidence", () => {
   assert.deepEqual(classifyDeviceSupervision("running", "connected"), {
@@ -92,6 +113,39 @@ test("Windows CLI emits a conservative receipt without modifying fixture runtime
     assert.equal(receipt.leaseState, "not-observed");
     assert.equal(receipt.safeToStart, false);
     assert.deepEqual(readdirSync(root), ["device.json"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Windows CLI fails closed on malformed config and absent LOCALAPPDATA", {
+  skip: process.platform !== "win32" ? "Windows runtime-root resolution" : false
+}, () => {
+  const root = mkdtempSync(path.join(tmpdir(), "executor-supervisor-boundary-"));
+  const runner = path.resolve("scripts", "probe-device-supervision.mjs");
+  try {
+    writeFileSync(path.join(root, "device.json"), JSON.stringify({
+      schema: "EXECUTOR_INSTALLED_DEVICE_V1",
+      service_url: "not a url",
+      device_id: "fixture"
+    }));
+    const malformed = spawnSync(process.execPath, [runner, root], {
+      encoding: "utf8", timeout: 15000, windowsHide: true
+    });
+    assert.equal(malformed.status, 0, malformed.stderr);
+    assert.equal(JSON.parse(malformed.stdout).configurationBound, false);
+
+    const cwdTrap = path.join(root, "Executor");
+    mkdirSync(cwdTrap);
+    copyFileSync(path.join(root, "device.json"), path.join(cwdTrap, "device.json"));
+    const env = { ...process.env, LOCALAPPDATA: "" };
+    const missingRoot = spawnSync(process.execPath, [runner], {
+      encoding: "utf8", timeout: 15000, windowsHide: true, cwd: root, env
+    });
+    assert.equal(missingRoot.status, 0, missingRoot.stderr);
+    const receipt = JSON.parse(missingRoot.stdout);
+    assert.equal(receipt.configurationBound, false);
+    assert.equal(receipt.leaseState, "unknown");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

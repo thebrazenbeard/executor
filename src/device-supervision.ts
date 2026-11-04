@@ -4,6 +4,17 @@ import { deviceSingletonIdentifier } from "./device-singleton.js";
 export type TaskObservation = "running" | "not-running" | "unknown";
 export type LeaseObservation = "connected" | "not-observed" | "unknown";
 
+/** Require the one exact root task. Name-only TaskScheduler matches can span paths. */
+export function parseScheduledTaskObservation(value: unknown): TaskObservation {
+  const rows = Array.isArray(value) ? value : value && typeof value === "object" ? [value] : [];
+  if (rows.length !== 1) return "unknown";
+  const row = rows[0] as Record<string, unknown>;
+  if (row.TaskName !== "Executor Device" || row.TaskPath !== "\\") return "unknown";
+  if (row.State === "Running") return "running";
+  if (row.State === "Ready" || row.State === "Disabled") return "not-running";
+  return "unknown";
+}
+
 export type SupervisionState =
   | "TASK_AND_LEASE_PRESENT"
   | "POSSIBLE_ORPHAN"
