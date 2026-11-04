@@ -15,6 +15,7 @@ $canonicalDir = Join-Path $scratch 'source'
 $canonical = Join-Path $canonicalDir 'Invoke-ExecutorRecovery.ps1'
 $installed = Join-Path $recovery 'Invoke-ExecutorRecovery.ps1'
 $taskName = 'Vera-Executor-ControlPlane-Recovery'
+$expectedUser = 'SYNTHETIC\FixtureUser'
 $global:executorAttestFakeTasks = @()
 
 function Get-ScheduledTask {
@@ -28,7 +29,8 @@ function Get-ScheduledTask {
 
 function Run-Fixture([string]$pin) {
   & $SubjectPath -CanonicalScriptPath $canonical `
-    -ExpectedCanonicalSha256 $pin -RuntimeRoot $runtime |
+    -ExpectedCanonicalSha256 $pin -ExpectedTaskUserId $expectedUser `
+    -RuntimeRoot $runtime |
     Out-String | ConvertFrom-Json
 }
 
@@ -51,11 +53,25 @@ try {
   $task = [pscustomobject]@{
     TaskName = $taskName
     TaskPath = '\'
-    Principal = [pscustomobject]@{RunLevel='Limited'}
+    Principal = [pscustomobject]@{RunLevel='Limited';UserId=$expectedUser;LogonType='Interactive'}
     Actions = @([pscustomobject]@{
       Execute = (Join-Path $PSHOME 'powershell.exe')
       Arguments = $expectedArgs
     })
+    Triggers = @(
+      [pscustomobject]@{
+        CimClass = [pscustomobject]@{CimClassName='MSFT_TaskLogonTrigger'}
+        UserId = $expectedUser
+        Enabled = $true
+        Repetition = [pscustomobject]@{Interval=$null}
+      },
+      [pscustomobject]@{
+        CimClass = [pscustomobject]@{CimClassName='MSFT_TaskTimeTrigger'}
+        UserId = $null
+        Enabled = $true
+        Repetition = [pscustomobject]@{Interval='PT5M'}
+      }
+    )
   }
   $global:executorAttestFakeTasks = @($task)
 
@@ -69,6 +85,26 @@ try {
   $task.Principal.RunLevel = 'Highest'
   Assert-Issue (Run-Fixture $pin) 'TASK_RUN_LEVEL_NOT_LIMITED'
   $task.Principal.RunLevel = 'Limited'
+
+  $task.Principal.UserId = 'SYSTEM'
+  Assert-Issue (Run-Fixture $pin) 'TASK_PRINCIPAL_USER_MISMATCH'
+  $task.Principal.UserId = $expectedUser
+
+  $task.Principal.LogonType = 'ServiceAccount'
+  Assert-Issue (Run-Fixture $pin) 'TASK_PRINCIPAL_LOGON_TYPE_MISMATCH'
+  $task.Principal.LogonType = 'Interactive'
+
+  $task.Triggers[1].CimClass.CimClassName = 'MSFT_TaskDailyTrigger'
+  Assert-Issue (Run-Fixture $pin) 'TASK_TRIGGER_TOPOLOGY_MISMATCH'
+  $task.Triggers[1].CimClass.CimClassName = 'MSFT_TaskTimeTrigger'
+
+  $task.Triggers[0].UserId = 'SYSTEM'
+  Assert-Issue (Run-Fixture $pin) 'TASK_LOGON_TRIGGER_USER_OR_ENABLED_MISMATCH'
+  $task.Triggers[0].UserId = $expectedUser
+
+  $task.Triggers[1].Repetition.Interval = 'PT15M'
+  Assert-Issue (Run-Fixture $pin) 'TASK_REPETITION_TRIGGER_MISMATCH'
+  $task.Triggers[1].Repetition.Interval = 'PT5M'
 
   $task.Actions[0].Execute = 'C:\Untrusted\powershell.exe'
   Assert-Issue (Run-Fixture $pin) 'TASK_EXECUTABLE_MISMATCH'
