@@ -21,22 +21,27 @@ function Require-Command([string]$Name) {
   return $command.Source
 }
 
-function Stop-ExistingInstalledDeviceProcesses([string]$OldAgentRoot,[string]$OldPayloadRoot) {
-  $needles = @($OldAgentRoot,$OldPayloadRoot) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-  if ($needles.Count -eq 0) { return }
-
-  $matches = @(Get-CimInstance Win32_Process | Where-Object {
-    $commandLine = [string]$_.CommandLine
-    if ([string]::IsNullOrWhiteSpace($commandLine)) { return $false }
-    foreach ($needle in $needles) {
-      if ($commandLine.IndexOf([string]$needle,[StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+function Assert-FreshInstallTargets {
+  # Bootstrap is intentionally fresh-only. An upgrade must preserve and separately
+  # qualify the installed agent, payload, scheduler task, and DPAPI credentials.
+  foreach ($target in @($AgentRoot,$PayloadRoot,$configPath,$credentialPath,$caPath)) {
+    if (Test-Path -LiteralPath $target) {
+      throw "EXISTING_EXECUTOR_INSTALL: refusing to overwrite $target. Use a qualified maintenance upgrade."
     }
-    return $false
-  })
-
-  foreach ($process in $matches) {
-    Stop-Process -Id ([int]$process.ProcessId) -Force -ErrorAction Stop
   }
+  if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+    throw "EXISTING_EXECUTOR_INSTALL: refusing to replace scheduled task '$TaskName'. Use a qualified maintenance upgrade."
+  }
+}
+
+function WriteNewFileBytes([string]$Path,[byte[]]$Bytes) {
+  # CreateNew fails instead of overwriting if another process creates the file.
+  $stream = [IO.File]::Open($Path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+  try {
+    $stream.Write($Bytes,0,$Bytes.Length)
+    $stream.Flush()
+  }
+  finally { $stream.Dispose() }
 }
 
 if ($DeviceId -notmatch '^[A-Za-z0-9._:-]{1,128}$') {
@@ -54,6 +59,11 @@ if (-not [string]::IsNullOrEmpty($uri.UserInfo)) {
   throw "ServiceUrl must not embed credentials"
 }
 
+$configPath = Join-Path $RuntimeRoot "device.json"
+$credentialPath = Join-Path $RuntimeRoot "device-token.dpapi"
+$caPath = Join-Path $RuntimeRoot "device-ca.crt"
+Assert-FreshInstallTargets
+
 $git = Require-Command "git"
 $node = Require-Command "node"
 $npm = Require-Command "npm"
@@ -61,16 +71,7 @@ $powershell = (Get-Command powershell.exe -ErrorAction Stop).Source
 
 New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
 $staging = Join-Path $RuntimeRoot ("Agent.staging." + [Guid]::NewGuid().ToString("N"))
-$backup = $null
-$configPath = Join-Path $RuntimeRoot "device.json"
-$credentialPath = Join-Path $RuntimeRoot "device-token.dpapi"
-$caPath = Join-Path $RuntimeRoot "device-ca.crt"
-
-$existingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-if ($existingTask) {
-  Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-}
-Stop-ExistingInstalledDeviceProcesses -OldAgentRoot $AgentRoot -OldPayloadRoot $PayloadRoot
+$payloadCandidate = "$PayloadRoot.candidate.$([Guid]::NewGuid().ToString('N'))"
 
 try {
   & $git clone --no-tags $SourceRepository $staging
@@ -89,35 +90,34 @@ try {
     & $npm run build
     if ($LASTEXITCODE -ne 0) { throw "Executor npm run build failed" }
 
-    & (Join-Path $staging "scripts\Install-ExecutorDesktopCommander.ps1") -InstallRoot $PayloadRoot | Out-Host
+    # The nested installer supports replacement. Give it a unique, never-used
+    # candidate directory instead of the installed payload path.
+    & (Join-Path $staging "scripts\Install-ExecutorDesktopCommander.ps1") -InstallRoot $payloadCandidate | Out-Host
   }
   finally {
     Pop-Location
   }
 
-  $manifestPath = Join-Path $PayloadRoot "executor-desktop-commander.manifest.json"
+  $manifestPath = Join-Path $payloadCandidate "executor-desktop-commander.manifest.json"
   if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-    throw "Qualified Desktop Commander manifest was not installed"
+    throw "Qualified Desktop Commander manifest was not built"
   }
   $manifestHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $manifestPath).Hash.ToLowerInvariant()
 
-  if (Test-Path -LiteralPath $AgentRoot) {
-    $backup = "$AgentRoot.backup.$([DateTime]::UtcNow.ToString('yyyyMMddHHmmss'))"
-    Move-Item -LiteralPath $AgentRoot -Destination $backup
-  }
-  Move-Item -LiteralPath $staging -Destination $AgentRoot
-  if ($backup -and (Test-Path -LiteralPath $backup)) {
-    Remove-Item -LiteralPath $backup -Recurse -Force
-    $backup = $null
-  }
+  Assert-FreshInstallTargets
+  # Directory.Move fails on an occupied destination. No backup/replace/delete.
+  [IO.Directory]::Move($payloadCandidate,$PayloadRoot)
+  [IO.Directory]::Move($staging,$AgentRoot)
 
   if (-not [string]::IsNullOrWhiteSpace($CaCertificateBase64)) {
-    try { [IO.File]::WriteAllBytes($caPath, [Convert]::FromBase64String($CaCertificateBase64)) }
+    try { $caBytes = [Convert]::FromBase64String($CaCertificateBase64) }
     catch { throw "CaCertificateBase64 is not valid base64" }
+    WriteNewFileBytes -Path $caPath -Bytes $caBytes
   }
 
   $secureToken = ConvertTo-SecureString -String $DeviceToken -AsPlainText -Force
-  $secureToken | ConvertFrom-SecureString | Set-Content -LiteralPath $credentialPath -Encoding ASCII
+  $encryptedToken = $secureToken | ConvertFrom-SecureString
+  WriteNewFileBytes -Path $credentialPath -Bytes ([Text.Encoding]::ASCII.GetBytes($encryptedToken + [Environment]::NewLine))
 
   $configJson = [ordered]@{
     schema = "EXECUTOR_INSTALLED_DEVICE_V1"
@@ -131,7 +131,7 @@ try {
     ca_path = if (Test-Path -LiteralPath $caPath -PathType Leaf) { $caPath } else { $null }
     tls_server_name = if ([string]::IsNullOrWhiteSpace($TlsServerName)) { $null } else { $TlsServerName }
   } | ConvertTo-Json -Depth 4
-  $configJson | Set-Content -LiteralPath $configPath -Encoding UTF8
+  WriteNewFileBytes -Path $configPath -Bytes ([Text.Encoding]::UTF8.GetBytes($configJson + [Environment]::NewLine))
 
   $launcher = Join-Path $AgentRoot "scripts\Start-ExecutorInstalledDevice.ps1"
   $arguments = '-NoProfile -WindowStyle Hidden -File "{0}" -RuntimeRoot "{1}"' -f $launcher,$RuntimeRoot
@@ -139,7 +139,7 @@ try {
   $userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
   $principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal | Out-Null
   Start-ScheduledTask -TaskName $TaskName
 
   [pscustomobject]@{
@@ -155,12 +155,8 @@ try {
   } | ConvertTo-Json -Depth 4
 }
 catch {
-  if (Test-Path -LiteralPath $staging) {
-    Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
-  }
-  if ($backup -and (Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $AgentRoot)) {
-    Move-Item -LiteralPath $backup -Destination $AgentRoot
-  }
+  # Preserve any created candidate/partial installation for diagnosis.
+  # No fallback cleanup may delete an installation owned by another process.
   throw
 }
 finally {
