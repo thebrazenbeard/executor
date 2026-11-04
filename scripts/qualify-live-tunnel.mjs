@@ -15,13 +15,20 @@ if (!deviceId) throw new Error("EXECUTOR_REMOTE_DEVICE_ID is required");
 if (!localClientToken) throw new Error("EXECUTOR_CLIENT_TOKEN is required to read detailed local /health counters");
 
 const remoteUrl = new URL(remoteMcpUrl);
-const remoteHost = remoteUrl.hostname.toLowerCase();
+// WHATWG URL.hostname encloses IPv6 literals in brackets and preserves a
+// trailing DNS dot. Normalize both before classifying literal loopback hosts.
+const remoteHost = remoteUrl.hostname.toLowerCase()
+  .replace(/^\[([^\]]+)\]$/, "$1")
+  .replace(/\.+$/, "");
 const loopbackHost = remoteHost === "localhost"
   || remoteHost.endsWith(".localhost")
   || remoteHost === "::1"
   || remoteHost === "0.0.0.0"
   || remoteHost === "::"
-  || remoteHost.startsWith("127.");
+  || remoteHost.startsWith("127.")
+  // IPv4-mapped IPv6 127.0.0.0/8 canonicalizes to ::ffff:7fXX:XXXX.
+  || /^::ffff:7f[0-9a-f]{2}(?::|$)/.test(remoteHost)
+  || remoteHost === "::ffff:0:0";
 
 if (remoteUrl.protocol !== "https:" || loopbackHost) {
   throw new Error("live tunnel qualification requires a non-loopback HTTPS remote MCP URL");
