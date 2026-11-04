@@ -15,15 +15,15 @@ $canonicalDir = Join-Path $scratch 'source'
 $canonical = Join-Path $canonicalDir 'Invoke-ExecutorRecovery.ps1'
 $installed = Join-Path $recovery 'Invoke-ExecutorRecovery.ps1'
 $taskName = 'Vera-Executor-ControlPlane-Recovery'
-$script:fakeTasks = @()
+$global:executorAttestFakeTasks = @()
 
 function Get-ScheduledTask {
   [CmdletBinding()]
   param([string]$TaskName, [string]$TaskPath)
-  if ($TaskName -cne $script:taskName -or $TaskPath -cne '\') {
+  if ($TaskName -cne 'Vera-Executor-ControlPlane-Recovery' -or $TaskPath -cne '\') {
     throw 'Attestation attempted to query a different scheduler subject.'
   }
-  return $script:fakeTasks
+  return $global:executorAttestFakeTasks
 }
 
 function Run-Fixture([string]$pin) {
@@ -57,7 +57,7 @@ try {
       Arguments = $expectedArgs
     })
   }
-  $script:fakeTasks = @($task)
+  $global:executorAttestFakeTasks = @($task)
 
   $ok = Run-Fixture $pin
   if ($ok.status -ne 'SOURCE_TASK_MATCH_NOT_RUNTIME_QUALIFIED' -or
@@ -82,9 +82,9 @@ try {
   Assert-Issue (Run-Fixture $pin) 'ROOT_TASK_NOT_UNIQUE_OR_IDENTITY_MISMATCH'
   $task.TaskPath = '\'
 
-  $script:fakeTasks = @($task, $task)
+  $global:executorAttestFakeTasks = @($task, $task)
   Assert-Issue (Run-Fixture $pin) 'ROOT_TASK_NOT_UNIQUE_OR_IDENTITY_MISMATCH'
-  $script:fakeTasks = @($task)
+  $global:executorAttestFakeTasks = @($task)
 
   [IO.File]::AppendAllText($installed, 'tampered')
   Assert-Issue (Run-Fixture $pin) 'INSTALLED_SCRIPT_SOURCE_DRIFT'
@@ -93,9 +93,10 @@ try {
   Assert-Issue (Run-Fixture ('a'*64)) 'CANONICAL_SOURCE_PIN_MISMATCH'
   Assert-Issue (Run-Fixture 'not-a-sha') 'CANONICAL_SOURCE_SHA256_PIN_INVALID'
 
-  $script:fakeTasks = @()
+  $global:executorAttestFakeTasks = @()
   Assert-Issue (Run-Fixture $pin) 'ROOT_TASK_NOT_UNIQUE_OR_IDENTITY_MISMATCH'
 } finally {
+  Remove-Variable -Name executorAttestFakeTasks -Scope Global -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $scratch) {
     Remove-Item -LiteralPath $scratch -Recurse -Force
   }
