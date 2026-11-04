@@ -1,9 +1,27 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
+function runWindowsBootstrap(runtime: string, taskName: string) {
+  return spawnSync("powershell.exe", [
+    "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+    resolve("scripts", "Install-ExecutorDevice.ps1"),
+    "-ServiceUrl", "https://example.invalid", "-DeviceId", "test-device",
+    "-DeviceToken", "synthetic-test-token", "-RuntimeRoot", runtime,
+    "-AgentRoot", join(runtime, "Agent"),
+    "-PayloadRoot", join(runtime, "DesktopCommanderMCP"), "-TaskName", taskName,
+  ], { encoding: "utf8", timeout: 15000 });
+}
+
+function runWindowsPowerShell(code: string) {
+  return spawnSync("powershell.exe", [
+    "-NoProfile", "-NonInteractive", "-Command", code,
+  ], { encoding: "utf8", timeout: 15000 });
+}
 
 test("device agent supports an operator-owned CA for direct WSS", async () => {
   const agent = await readFile("src/device-agent.ts", "utf8");
@@ -136,10 +154,12 @@ test("Windows device installer refuses an existing runtime without terminating p
   assert.equal(/Remove-Item[^\n]*\$backup|AgentRoot\.backup\./i.test(install), false);
   assert.match(install, /FileMode\]::CreateNew/i);
 
-  const initialGuard = install.indexOf("\nAssert-FreshInstallTargets\n");
+  const initialGuard = install.search(/^Assert-FreshInstallTargets\r?$/m);
   const firstClone = install.indexOf("& $git clone");
   const firstCredentialWrite = install.indexOf("WriteNewFileBytes -Path $credentialPath");
   assert.ok(initialGuard > 0 && initialGuard < firstClone, "existing installation must be rejected before cloning");
+  assert.ok(install.replace(/\r?\n/g, "\r\n").search(/^Assert-FreshInstallTargets\r?$/m) > 0,
+    "the safety guard must be found under Windows CRLF checkout");
   assert.ok(firstCredentialWrite > firstClone, "new credential is only written for a fresh install after source qualification");
   assert.match(install, /Install-ExecutorDesktopCommander\.ps1"\) -InstallRoot \$payloadCandidate/);
   assert.match(install, /\[IO\.Directory\]::Move\(\$payloadCandidate,\$PayloadRoot\)/);
@@ -153,20 +173,14 @@ test("Windows bootstrap refuses an existing agent before any file/process/task m
   const token = join(runtime, "device-token.dpapi");
   const config = join(runtime, "device.json");
   const marker = join(agent, "owner-marker.txt");
-  const script = resolve("scripts", "Install-ExecutorDevice.ps1");
-  const taskName = `Executor FreshOnly Test ${Date.now()}-${process.pid}`;
+  const taskName = `Executor FreshOnly Test ${randomUUID()}`;
   try {
     await mkdir(agent);
     await writeFile(marker, "owned agent: must remain untouched\n");
     await writeFile(token, "owned credentials: must remain untouched\n");
     await writeFile(config, "owned config: must remain untouched\n");
 
-    const result = spawnSync("powershell.exe", [
-      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script,
-      "-ServiceUrl", "https://example.invalid", "-DeviceId", "test-device",
-      "-DeviceToken", "synthetic-test-token", "-RuntimeRoot", runtime,
-      "-AgentRoot", agent, "-PayloadRoot", payload, "-TaskName", taskName,
-    ], { encoding: "utf8", timeout: 15000 });
+    const result = runWindowsBootstrap(runtime, taskName);
 
     assert.equal(result.error, undefined, String(result.error));
     assert.notEqual(result.status, 0, "existing runtime must fail closed");
@@ -177,5 +191,61 @@ test("Windows bootstrap refuses an existing agent before any file/process/task m
     await assert.rejects(readFile(join(runtime, "DesktopCommanderMCP", "executor-desktop-commander.manifest.json")));
   } finally {
     await rm(runtime, { recursive: true, force: true });
+  }
+});
+
+test("Windows bootstrap refuses a payload-only collision without touching the existing payload", { skip: process.platform !== "win32" }, async () => {
+  const runtime = await mkdtemp(join(tmpdir(), "executor-payload-only-test-"));
+  const payload = join(runtime, "DesktopCommanderMCP");
+  const marker = join(payload, "owner-marker.txt");
+  const taskName = `Executor FreshOnly Test ${randomUUID()}`;
+  try {
+    await mkdir(payload);
+    await writeFile(marker, "owned payload: must remain untouched\n");
+
+    const result = runWindowsBootstrap(runtime, taskName);
+    assert.equal(result.error, undefined, String(result.error));
+    assert.notEqual(result.status, 0, "existing payload must fail closed");
+    assert.match(`${result.stdout}\n${result.stderr}`, /EXISTING_EXECUTOR_INSTALL/);
+    assert.equal(await readFile(marker, "utf8"), "owned payload: must remain untouched\n");
+    assert.deepEqual(await readdir(runtime), ["DesktopCommanderMCP"]);
+    assert.deepEqual(await readdir(payload), ["owner-marker.txt"]);
+  } finally {
+    await rm(runtime, { recursive: true, force: true });
+  }
+});
+
+test("Windows bootstrap refuses a task-only collision and preserves that exact task", { skip: process.platform !== "win32" }, async () => {
+  const runtime = await mkdtemp(join(tmpdir(), "executor-task-only-test-"));
+  const taskName = `Executor FreshOnly Test ${randomUUID()}`;
+  const ownerMarker = `EXECUTOR_TEST_OWNED_${randomUUID()}`;
+  // Names and descriptions are generated locally and contain no shell metacharacters.
+  const setup = `$ErrorActionPreference='Stop'; $action=New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c exit 0'; $trigger=New-ScheduledTaskTrigger -Once -At ((Get-Date).AddDays(30)); Register-ScheduledTask -TaskName '${taskName}' -Action $action -Trigger $trigger -Description '${ownerMarker}' | Out-Null; Write-Output 'SYNTHETIC_TASK_REGISTERED'`;
+  const verify = `$ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskName '${taskName}' -ErrorAction Stop; if($task.Description -ne '${ownerMarker}'){throw 'SYNTHETIC_TASK_CHANGED'}; Write-Output 'SYNTHETIC_TASK_UNCHANGED'`;
+  const cleanup = `$ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskName '${taskName}' -ErrorAction SilentlyContinue; if($null -ne $task){if($task.Description -ne '${ownerMarker}'){throw 'REFUSING_UNOWNED_TASK_CLEANUP'}; Unregister-ScheduledTask -TaskName '${taskName}' -Confirm:$false; Write-Output 'SYNTHETIC_TASK_REMOVED'}`;
+  try {
+    const registered = runWindowsPowerShell(setup);
+    assert.equal(registered.error, undefined, String(registered.error));
+    assert.equal(registered.status, 0, `test-task setup failed: ${registered.stderr}`);
+    assert.match(registered.stdout, /SYNTHETIC_TASK_REGISTERED/);
+
+    const refusal = runWindowsBootstrap(runtime, taskName);
+    assert.equal(refusal.error, undefined, String(refusal.error));
+    assert.notEqual(refusal.status, 0, "existing scheduled task must fail closed");
+    assert.match(`${refusal.stdout}\n${refusal.stderr}`, /EXISTING_EXECUTOR_INSTALL/);
+    assert.deepEqual(await readdir(runtime), [], "refusal must not create agent, payload, config, or credentials");
+
+    const preserved = runWindowsPowerShell(verify);
+    assert.equal(preserved.error, undefined, String(preserved.error));
+    assert.equal(preserved.status, 0, `synthetic task changed: ${preserved.stderr}`);
+    assert.match(preserved.stdout, /SYNTHETIC_TASK_UNCHANGED/);
+  } finally {
+    // Never unregister any existing task unless its original test-owned description matches.
+    try {
+      const removed = runWindowsPowerShell(cleanup);
+      assert.equal(removed.status, 0, `test-owned task cleanup failed: ${removed.stderr}`);
+    } finally {
+      await rm(runtime, { recursive: true, force: true });
+    }
   }
 });
