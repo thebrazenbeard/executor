@@ -60,6 +60,22 @@ try {
   if ($response.status -ne 'LOCAL_READY') { throw 'Healthy probe did not return LOCAL_READY.' }
   if (Test-Path -LiteralPath $health) { throw '-ProbeOnly created a previously absent health.json.' }
   Write-Output 'PASS absent status stays absent under -ProbeOnly'
+
+  # Normal recovery without credentials must retain the pre-existing durable
+  # failure receipt; no tunnel launch occurs because the fixture has no creds.
+  foreach ($listener in $listeners) { $listener.Stop() }
+  $listeners = @()
+  Set-Content -LiteralPath $fakeDirect -Encoding ASCII -Value 'param([string]$RuntimeRoot); Write-Output ''{"running":false}'''
+  $threwExpected = $false
+  try { & $invokeScript | Out-Null } catch {
+    if ($_.Exception.Message -notlike '*EXECUTOR_NOT_READY_WAITING_CREDENTIALS*') { throw }
+    $threwExpected = $true
+  }
+  if (-not $threwExpected) { throw 'Normal recovery did not reject absent credentials.' }
+  if (-not (Test-Path -LiteralPath $health -PathType Leaf)) { throw 'Normal recovery did not persist failure receipt.' }
+  $persisted = Get-Content -Raw -LiteralPath $health | ConvertFrom-Json
+  if ($persisted.status -ne 'WAITING_CREDENTIALS') { throw 'Normal recovery persisted wrong failure status.' }
+  Write-Output 'PASS normal recovery still persists a failure receipt without starting a tunnel'
 } finally {
   foreach ($listener in $listeners) { try { $listener.Stop() } catch {} }
   $env:LOCALAPPDATA = $originalLocalAppData
