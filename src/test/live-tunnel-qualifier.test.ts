@@ -96,3 +96,33 @@ test("live tunnel qualifier rejects loopback or plaintext endpoints so local tra
   assert.notEqual(result.status, 0);
   assert.match(result.stderr + result.stdout, /non-loopback HTTPS remote MCP URL/i);
 });
+
+test("live tunnel qualifier rejects canonical IPv6, mapped IPv4 and trailing-dot localhost HTTPS", () => {
+  const forbidden = [
+    "https://[::1]:1/mcp",
+    "https://[0:0:0:0:0:0:0:1]:1/mcp",
+    "https://[::]:1/mcp",
+    "https://[::ffff:127.0.0.1]:1/mcp",
+    "https://[::ffff:127.42.3.4]:1/mcp",
+    "https://[::ffff:0.0.0.0]:1/mcp",
+    "https://localhost.:1/mcp",
+    "https://node.localhost.:1/mcp"
+  ];
+
+  for (const url of forbidden) {
+    const result = spawnSync(process.execPath, ["scripts/qualify-live-tunnel.mjs"], {
+      encoding: "utf8",
+      timeout: 3000,
+      env: {
+        ...process.env,
+        EXECUTOR_REMOTE_MCP_URL: url,
+        EXECUTOR_REMOTE_DEVICE_ID: "qualification",
+        EXECUTOR_CLIENT_TOKEN: "qualification-client"
+      }
+    });
+
+    assert.notEqual(result.status, 0, "loopback URL unexpectedly qualified: " + url);
+    assert.match(result.stderr + result.stdout, /non-loopback HTTPS remote MCP URL/i,
+      "loopback URL was not rejected by pre-network validation: " + url);
+  }
+});
