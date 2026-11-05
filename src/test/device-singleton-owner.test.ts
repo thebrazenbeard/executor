@@ -46,6 +46,7 @@ test("owner receipt requires exact listening server identity (synthetic contract
   assert.equal(receipt.singleton_identifier, identifier);
   assert.match(receipt.bound_address_sha256, /^[a-f0-9]{64}$/);
   assert.equal(matchesIndependentOwnerWitness(receipt, witnessFrom(receipt)), true);
+  assert.equal(issueDeviceSingletonOwnerReceipt(server, identifier.toUpperCase()).singleton_identifier, identifier);
   assert.throws(() => issueDeviceSingletonOwnerReceipt(server, "0".repeat(32)), /exact bound singleton server/);
 });
 
@@ -68,6 +69,16 @@ test("a receipt for a different singleton or forged address fails independent co
   assert.equal(matchesIndependentOwnerWitness(receipt, { ...witness, bound_address_sha256: "0".repeat(64) }), false);
   assert.equal(matchesIndependentOwnerWitness({ ...receipt, bound_address_sha256: "0".repeat(64) }, { ...witness, bound_address_sha256: "0".repeat(64) }), false);
   assert.equal(matchesIndependentOwnerWitness({ ...receipt, schema: "EXECUTOR_SINGLETON_OWNER_RECEIPT_V1", process_generation: "not-a-uuid" }, witness), false);
+});
+
+test("absent or malformed witness/receipt fails closed without throwing", { skip: !supported }, () => {
+  const identifier = randomBytes(16).toString("hex");
+  const receipt = issueDeviceSingletonOwnerReceipt(receiptFixture(identifier), identifier);
+  const witness = witnessFrom(receipt);
+  for (const missing of [undefined, null, false, 0, "not-an-object", []]) {
+    assert.equal(matchesIndependentOwnerWitness(receipt, missing as unknown as IndependentOwnerWitness), false);
+    assert.equal(matchesIndependentOwnerWitness(missing as unknown as DeviceSingletonOwnerReceipt, witness), false);
+  }
 });
 
 test("Windows OS-backed lease receipt is emitted only after a real listen", { skip: process.platform !== "win32" }, async () => {
