@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, readFile } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { lstat, open, realpath } from "node:fs/promises";
+import { isAbsolute, join, parse, resolve, sep } from "node:path";
 
 /**
  * A deliberately non-executing, local replay hold for an operation intent.
@@ -68,17 +68,56 @@ function sameRecord(a: HeldOperationRecord, b: HeldOperationRecord): boolean {
 
 export class HeldOperationJournal {
   constructor(private readonly directory: string) {
-    if (!isAbsolute(directory)) throw new HeldOperationJournalError("INVALID_INTENT", "journal path must be absolute");
+    if (!isAbsolute(directory) || resolve(directory) !== directory) {
+      throw new HeldOperationJournalError("INVALID_INTENT", "journal path must be absolute and normalized");
+    }
+  }
+
+  private async requirePreprovisionedDirectory(): Promise<void> {
+    // No recursive creation: walking a missing/untrusted ancestor could itself
+    // cross a symlink before we have established the target directory's custody.
+    const parsed = parse(this.directory);
+    let current = parsed.root;
+    const segments = this.directory.slice(parsed.root.length).split(sep).filter(Boolean);
+    if (segments.length === 0) {
+      throw new HeldOperationJournalError("INDETERMINATE", "journal cannot be a filesystem root");
+    }
+    for (const [index, segment] of segments.entries()) {
+      current = join(current, segment);
+      let stat;
+      try { stat = await lstat(current); }
+      catch { throw new HeldOperationJournalError("INDETERMINATE", "journal ancestry is missing or unreadable"); }
+      if (!stat.isDirectory() || stat.isSymbolicLink()) {
+        throw new HeldOperationJournalError("INDETERMINATE", "journal ancestry has a link or non-directory component");
+      }
+
+      if (process.platform !== "win32") {
+        const rootOwnedStickyDirectory = stat.uid === 0 && (stat.mode & 0o1000) !== 0;
+        if ((stat.mode & 0o022) !== 0 && !rootOwnedStickyDirectory) {
+          throw new HeldOperationJournalError("INDETERMINATE", "journal ancestry has untrusted write permissions");
+        }
+        if (index === segments.length - 1 &&
+          ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.())) {
+          throw new HeldOperationJournalError("INDETERMINATE", "journal directory must be private and owned by this process user");
+        }
+      }
+    }
+    // POSIX realpath independently catches link rebinding observed during the
+    // traversal. Windows reparse/ACL and adversarial TOCTOU need host review.
+    if (process.platform !== "win32") {
+      let actual: string;
+      try { actual = await realpath(this.directory); }
+      catch { throw new HeldOperationJournalError("INDETERMINATE", "journal ancestry changed or became unreadable"); }
+      if (actual !== this.directory) {
+        throw new HeldOperationJournalError("INDETERMINATE", "journal ancestry is not canonical");
+      }
+    }
   }
 
   /** Never dispatches or upgrades a held record, even on an identical retry. */
   async reserve(input: HeldOperationIntent): Promise<HeldOperationResult> {
     const expected = validateIntent(input);
-    await mkdir(this.directory, { recursive: true, mode: 0o700 });
-    const directoryStat = await lstat(this.directory);
-    if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
-      throw new HeldOperationJournalError("INDETERMINATE", "journal directory is not a real directory");
-    }
+    await this.requirePreprovisionedDirectory();
 
     // The external identifier never becomes part of a filesystem path.
     const filename = createHash("sha256").update(expected.operationId, "utf8").digest("hex") + ".json";

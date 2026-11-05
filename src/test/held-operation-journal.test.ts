@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { HeldOperationJournal, HeldOperationJournalError } from "../held-operation-journal.js";
@@ -75,4 +75,40 @@ test("existing held record cannot claim a different disposition or extra fields"
   await writeFile(file, "x".repeat(8192), "utf8");
   await assert.rejects(new HeldOperationJournal(root).reserve(intent), (err: unknown) =>
     err instanceof HeldOperationJournalError && err.code === "INDETERMINATE");
+});
+
+test("missing journal directory fails closed without creating it", async () => {
+  const root = await mkdtemp(join(tmpdir(), "executor-held-intent-"));
+  const missing = join(root, "not-provisioned");
+  await assert.rejects(new HeldOperationJournal(missing).reserve(intent), (err: unknown) =>
+    err instanceof HeldOperationJournalError && err.code === "INDETERMINATE");
+  await assert.rejects(stat(missing), { code: "ENOENT" });
+});
+
+test("a symlink ancestor cannot redirect the journal outside its configured root", { skip: process.platform === "win32" }, async () => {
+  const inside = await mkdtemp(join(tmpdir(), "executor-inside-"));
+  const outside = await mkdtemp(join(tmpdir(), "executor-outside-"));
+  const escaped = join(outside, "held");
+  await mkdir(escaped, { mode: 0o700 });
+  await symlink(outside, join(inside, "link"), "dir");
+  await assert.rejects(new HeldOperationJournal(join(inside, "link", "held")).reserve(intent), (err: unknown) =>
+    err instanceof HeldOperationJournalError && err.code === "INDETERMINATE");
+  assert.deepEqual(await readdir(escaped), []);
+});
+
+test("an existing world-writable journal or ancestor is not trusted", { skip: process.platform === "win32" }, async () => {
+  const root = await mkdtemp(join(tmpdir(), "executor-held-intent-"));
+  await chmod(root, 0o777);
+  await assert.rejects(new HeldOperationJournal(root).reserve(intent), (err: unknown) =>
+    err instanceof HeldOperationJournalError && err.code === "INDETERMINATE");
+  await chmod(root, 0o700);
+
+  const shared = join(root, "shared");
+  const held = join(shared, "held");
+  await mkdir(shared, { mode: 0o700 });
+  await mkdir(held, { mode: 0o700 });
+  await chmod(shared, 0o777);
+  await assert.rejects(new HeldOperationJournal(held).reserve(intent), (err: unknown) =>
+    err instanceof HeldOperationJournalError && err.code === "INDETERMINATE");
+  await chmod(shared, 0o700);
 });
