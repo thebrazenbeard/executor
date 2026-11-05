@@ -12,6 +12,13 @@ intent fails `CONFLICT`. Malformed or partially written prior records fail
 `INDETERMINATE` and are preserved for human reconciliation. No method can
 dispatch an effect, clear a hold, or mark a result `COMPLETED`.
 
+The journal directory must exist before invocation and, on POSIX, be owned
+by the current user with private permissions. All existing path components
+are inspected for symlinks and unsafe shared write access. Root-owned sticky
+directories such as `/tmp` are an explicit ancestor exception. The helper
+never recursively creates an untrusted path. A Windows path/reparse check is
+best-effort only; Node's POSIX mode does **not** establish Windows ACL custody.
+
 ## Evidence and limits
 
 - The source test uses a real temporary filesystem, new store instances,
@@ -19,8 +26,8 @@ dispatch an effect, clear a hold, or mark a result `COMPLETED`.
 - Local file persistence is useful for *process restart* observation, not an
   authenticated, rollback-resistant external receipt or exactly-once execution.
   A local backup restore or deletion can remove the reservation; disk or
-  directory fsync and malicious same-user filesystem interference are not
-  independently qualified. An existing file can also be unreadable during a
+  directory fsync and malicious same-user filesystem interference/TOCTOU are
+  not independently qualified. An existing file can also be unreadable during a
   concurrent initial write, in which case the consumer must hold, not replay.
 - `installedSourceSha256` is **caller-supplied**, not a verified loaded-binary
   identity. Neither `operationId` nor the device ID authenticates a principal.
