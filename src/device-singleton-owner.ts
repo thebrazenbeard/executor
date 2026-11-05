@@ -32,8 +32,9 @@ export interface IndependentOwnerWitness {
 }
 
 function singletonAddress(identifier: string, platform: "win32" | "linux"): string {
-  if (!/^[a-f0-9]{32}$/.test(identifier)) throw new Error("invalid singleton identifier");
-  return platform === "win32" ? `\\\\.\\pipe\\ExecutorDevice-${identifier}` : `\0ExecutorDevice-${identifier}`;
+  if (!/^[a-f0-9]{32}$/i.test(identifier)) throw new Error("invalid singleton identifier");
+  const key = identifier.toLowerCase();
+  return platform === "win32" ? `\\\\.\\pipe\\ExecutorDevice-${key}` : `\0ExecutorDevice-${key}`;
 }
 
 /** Issue only from an actual listening server after acquireDeviceSingleton. */
@@ -49,7 +50,7 @@ export function issueDeviceSingletonOwnerReceipt(server: Server, identifier: str
     pid: process.pid,
     node_time_origin_ms: performance.timeOrigin,
     emitted_at_ms: Date.now(),
-    singleton_identifier: identifier,
+    singleton_identifier: identifier.toLowerCase(),
     bound_address_sha256: createHash("sha256").update(expected).digest("hex"),
     process_generation: randomUUID()
   });
@@ -65,6 +66,9 @@ export function matchesIndependentOwnerWitness(
   receipt: DeviceSingletonOwnerReceipt,
   witness: IndependentOwnerWitness
 ): boolean {
+  // Callers may pass parsed or absent runtime data despite static TS types.
+  // Never turn a missing witness into an exception on a supervisory path.
+  if (receipt === null || typeof receipt !== "object" || witness === null || typeof witness !== "object") return false;
   return receipt.schema === "EXECUTOR_SINGLETON_OWNER_RECEIPT_V1"
     && (receipt.platform === "win32" || receipt.platform === "linux")
     && Number.isSafeInteger(receipt.pid) && receipt.pid > 0
