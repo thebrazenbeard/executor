@@ -24,7 +24,7 @@ function witnessFrom(receipt: DeviceSingletonOwnerReceipt): IndependentOwnerWitn
   return {
     pid: receipt.pid,
     platform: receipt.platform,
-    node_time_origin_ms: receipt.node_time_origin_ms,
+    os_process_created_epoch_ms: receipt.node_time_origin_ms - 1,
     singleton_identifier: receipt.singleton_identifier,
     bound_address_sha256: receipt.bound_address_sha256,
     process_generation: receipt.process_generation,
@@ -54,7 +54,8 @@ test("a cached receipt cannot silently survive a PID reuse or new process genera
   const receipt = issueDeviceSingletonOwnerReceipt(receiptFixture(identifier), identifier);
   const witness = witnessFrom(receipt);
   assert.equal(matchesIndependentOwnerWitness(receipt, { ...witness, live: false }), false);
-  assert.equal(matchesIndependentOwnerWitness(receipt, { ...witness, node_time_origin_ms: witness.node_time_origin_ms + 1 }), false);
+  assert.equal(matchesIndependentOwnerWitness(receipt, { ...witness, os_process_created_epoch_ms: witness.os_process_created_epoch_ms + 10_000 }), false);
+  assert.equal(matchesIndependentOwnerWitness(receipt, { ...witness, os_process_created_epoch_ms: witness.os_process_created_epoch_ms - 10_000 }), false);
   assert.equal(matchesIndependentOwnerWitness(receipt, { ...witness, process_generation: "00000000-0000-4000-8000-000000000000" }), false);
   assert.equal(matchesIndependentOwnerWitness(receipt, { ...witness, pid: witness.pid + 1 }), false);
 });

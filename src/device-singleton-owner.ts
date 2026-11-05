@@ -23,7 +23,8 @@ export interface IndependentOwnerWitness {
   /** All values must come from a separate, trusted live process observation. */
   pid: number;
   platform: "win32" | "linux";
-  node_time_origin_ms: number;
+  /** Independent OS process-creation time, not a copy of Node timeOrigin. */
+  os_process_created_epoch_ms: number;
   singleton_identifier: string;
   bound_address_sha256: string;
   process_generation: string;
@@ -77,7 +78,12 @@ export function matchesIndependentOwnerWitness(
     && witness.live === true
     && witness.pid === receipt.pid
     && witness.platform === receipt.platform
-    && witness.node_time_origin_ms === receipt.node_time_origin_ms
+    // Node's time origin is not identical to an OS process creation stamp.
+    // Corroborate a short startup window; generation custody is separately
+    // essential because PID plus a time window alone is not a unique identity.
+    && Number.isFinite(witness.os_process_created_epoch_ms)
+    && receipt.node_time_origin_ms - witness.os_process_created_epoch_ms >= -250
+    && receipt.node_time_origin_ms - witness.os_process_created_epoch_ms <= 5_000
     && witness.singleton_identifier === receipt.singleton_identifier
     && witness.bound_address_sha256 === receipt.bound_address_sha256
     && witness.process_generation === receipt.process_generation;
