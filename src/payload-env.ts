@@ -5,6 +5,12 @@ const BLOCKED_PAYLOAD_ENV = new Set([
   "HEALTH_URL_FILE",
   "OPENAI_MCP_TUNNEL_ID",
   "OPENAI_TUNNEL_RUNTIME_API_KEY",
+  // A qualified payload runs with the workstation user's authority. These
+  // protections reduce incidental credential and unsafe TLS inheritance;
+  // they are not an OS security boundary against that payload.
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "OPENAI_API_KEY",
+  "NODE_TLS_REJECT_UNAUTHORIZED",
   "NODE_OPTIONS",
   "NODE_PATH",
   "LD_PRELOAD",
