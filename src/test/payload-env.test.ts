@@ -55,3 +55,19 @@ test("payload environment removes Node preload/injection settings that would wea
   assert.equal("LD_PRELOAD" in env, false);
   assert.equal("DYLD_INSERT_LIBRARIES" in env, false);
 });
+
+test("payload environment excludes cloud owner secrets and TLS verification bypass from the qualified child", () => {
+  const env = payloadEnvironment({
+    PATH: "keep",
+    MY_TOOLCHAIN_VAR: "keep-me",
+    SUPABASE_SERVICE_ROLE_KEY: "synthetic-supabase-secret",
+    openai_api_key: "synthetic-openai-secret",
+    node_tls_reject_unauthorized: "0"
+  });
+
+  assert.equal(env.PATH, "keep");
+  assert.equal(env.MY_TOOLCHAIN_VAR, "keep-me");
+  assert.equal("SUPABASE_SERVICE_ROLE_KEY" in env, false);
+  assert.equal("openai_api_key" in env, false);
+  assert.equal("node_tls_reject_unauthorized" in env, false);
+});
