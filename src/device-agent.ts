@@ -7,6 +7,7 @@ import type { DeviceRequest, JsonRpc } from "./protocol.js";
 import { assertSafeDeviceServiceUrl, resolveInsideRoot, trustedSha256Matches } from "./security.js";
 import { payloadEnvironment } from "./payload-env.js";
 import { acquireDeviceSingleton, deviceSingletonIdentifier } from "./device-singleton.js";
+import { issueDeviceSingletonOwnerReceipt } from "./device-singleton-owner.js";
 
 const serviceUrl = process.env.EXECUTOR_SERVICE_URL ?? "";
 const token = process.env.EXECUTOR_DEVICE_TOKEN ?? "";
@@ -59,7 +60,10 @@ if (!manifest.mcp_args.length || path.normalize(manifest.mcp_args[0]) !== path.n
 // Keep Linux's existing behavior pending separate kernel-socket qualification.
 if (process.platform === "win32") {
   const singletonId = deviceSingletonIdentifier(serviceUrl, deviceId);
-  await acquireDeviceSingleton(singletonId);
+  const owner = await acquireDeviceSingleton(singletonId);
+  // Emitted only after this *Node process* binds the real named-pipe lease.
+  // A log reader must not accept this alone as OS-verified ownership.
+  console.error(JSON.stringify({ status: "device-singleton-owner", receipt: issueDeviceSingletonOwnerReceipt(owner, singletonId) }));
 }
 
 console.error(JSON.stringify({ status: "qualified-payload-spawn-start" }));
