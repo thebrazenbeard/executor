@@ -54,6 +54,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Control-plane socket fallback regressions failed" }
           powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\scripts\tests\Test-DirectSocketFallback.ps1
           if ($LASTEXITCODE -ne 0) { throw "Direct Caddy socket fallback regressions failed" }
+      - name: Verify recovery -ProbeOnly is filesystem read-only
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\\scripts\\tests\\Test-RecoveryProbeOnly.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Executor recovery ProbeOnly filesystem invariant failed" }
       - name: Qualify official OpenAI tunnel-client bootstrap
         if: runner.os == 'Windows'
         shell: powershell
